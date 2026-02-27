@@ -5,20 +5,40 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+
   email: {
     type: String,
     required: true,
     unique: true
   },
+
   password: {
     type: String,
-    required: true
+    required: false   // 👈 نخليها مش إجبارية علشان Google
   },
+
+  avatar: {
+    type: String,
+    default: ""
+  },
+
+  googleId: {
+    type: String,
+    default: null
+  },
+
+  language: {
+    type: String,
+    enum: ["en", "ar"],
+    default: "en"
+  },
+
   role: {
     type: String,
     enum: ["user", "admin"],
     default: "user"
   }
+
 }, { timestamps: true });
 
 module.exports = mongoose.model("User", userSchema);
