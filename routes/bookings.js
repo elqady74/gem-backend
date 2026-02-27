@@ -33,17 +33,35 @@ router.post("/", authMiddleware, async (req, res) => {
   try {
     const { visitDate, nationalityType, tickets } = req.body;
 
+    /* ===== Basic Validation ===== */
     if (!visitDate || !nationalityType || !tickets?.length) {
-      return res.status(400).json({ message: "Missing data" });
+      return res.status(400).json({ message: "Missing required data" });
+    }
+
+    if (!PRICES[nationalityType]) {
+      return res.status(400).json({ message: "Invalid nationality type" });
+    }
+
+    const visit = new Date(visitDate);
+    if (isNaN(visit.getTime())) {
+      return res.status(400).json({ message: "Invalid visit date" });
+    }
+
+    if (visit < new Date()) {
+      return res.status(400).json({ message: "Visit date cannot be in the past" });
     }
 
     let subtotal = 0;
     const calculatedTickets = [];
 
-    tickets.forEach(ticket => {
+    for (const ticket of tickets) {
 
-      const price = PRICES[nationalityType]?.[ticket.category];
-      if (!price) return;
+      if (!ticket.category || !ticket.quantity || ticket.quantity <= 0) {
+        continue;
+      }
+
+      const price = PRICES[nationalityType][ticket.category];
+      if (!price) continue;
 
       const itemTotal = price * ticket.quantity;
       subtotal += itemTotal;
@@ -53,9 +71,9 @@ router.post("/", authMiddleware, async (req, res) => {
         quantity: ticket.quantity,
         price
       });
-    });
+    }
 
-    if (calculatedTickets.length === 0) {
+    if (!calculatedTickets.length) {
       return res.status(400).json({ message: "Invalid ticket selection" });
     }
 
@@ -64,7 +82,7 @@ router.post("/", authMiddleware, async (req, res) => {
 
     const booking = await Booking.create({
       user: req.user.id,
-      visitDate,
+      visitDate: visit,
       nationalityType,
       tickets: calculatedTickets,
       subtotal,
@@ -76,7 +94,7 @@ router.post("/", authMiddleware, async (req, res) => {
     res.status(201).json(booking);
 
   } catch (error) {
-    console.log(error);
+    console.error("Booking Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -86,8 +104,12 @@ router.post("/", authMiddleware, async (req, res) => {
 ========================= */
 router.get("/my", authMiddleware, async (req, res) => {
   try {
-    const bookings = await Booking.find({ user: req.user.id }).sort({ createdAt: -1 });
+    const bookings = await Booking
+      .find({ user: req.user.id })
+      .sort({ createdAt: -1 });
+
     res.json(bookings);
+
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
@@ -98,6 +120,7 @@ router.get("/my", authMiddleware, async (req, res) => {
 ========================= */
 router.put("/:id/pay", authMiddleware, async (req, res) => {
   try {
+
     const booking = await Booking.findOne({
       _id: req.params.id,
       user: req.user.id
@@ -114,7 +137,10 @@ router.put("/:id/pay", authMiddleware, async (req, res) => {
     booking.paymentStatus = "paid";
     await booking.save();
 
-    res.json({ message: "Payment successful", booking });
+    res.json({
+      message: "Payment successful",
+      booking
+    });
 
   } catch (error) {
     res.status(500).json({ message: "Server error" });
