@@ -38,6 +38,7 @@ router.post("/ask", authMiddleware, async (req, res) => {
     res.json({ answer });
 
   } catch (error) {
+    console.error("AI Route Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -53,6 +54,7 @@ router.get("/chats", authMiddleware, async (req, res) => {
     res.json(chats);
 
   } catch (error) {
+    console.error("AI Route Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -109,6 +111,7 @@ router.get("/detections", authMiddleware, async (req, res) => {
     res.json(detections);
 
   } catch (error) {
+    console.error("AI Route Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

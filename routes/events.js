@@ -12,6 +12,7 @@ router.get("/", async (req, res) => {
     const events = await Event.find().sort({ date: 1 });
     res.json(events);
   } catch (error) {
+    console.error("Events Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -37,6 +38,7 @@ router.post("/", authMiddleware, async (req, res) => {
     res.status(201).json(event);
 
   } catch (error) {
+    console.error("Events Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -55,6 +57,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     res.json({ message: "Event deleted" });
 
   } catch (error) {
+    console.error("Events Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

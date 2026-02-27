@@ -14,6 +14,7 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res) => {
     await newArtifact.save();
     res.status(201).json(newArtifact);
   } catch (error) {
+    console.error("Artifacts Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -26,6 +27,7 @@ router.get("/", async (req, res) => {
     const artifacts = await Artifact.find();
     res.json(artifacts);
   } catch (error) {
+    console.error("Artifacts Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -43,6 +45,7 @@ router.get("/:id", async (req, res) => {
 
     res.json(artifact);
   } catch (error) {
+    console.error("Artifacts Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -65,6 +68,7 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res) => {
     res.json(updatedArtifact);
 
   } catch (error) {
+    console.error("Artifacts Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -83,6 +87,7 @@ router.delete("/:id", authMiddleware, adminMiddleware, async (req, res) => {
     res.json({ message: "Artifact deleted successfully" });
 
   } catch (error) {
+    console.error("Artifacts Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

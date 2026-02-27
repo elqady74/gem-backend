@@ -28,6 +28,7 @@ router.post("/:artifactId", authMiddleware, async (req, res) => {
     res.status(201).json(favorite);
 
   } catch (error) {
+    console.error("Favorites Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -43,6 +44,7 @@ router.get("/my", authMiddleware, async (req, res) => {
     res.json(favorites);
 
   } catch (error) {
+    console.error("Favorites Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -60,6 +62,7 @@ router.delete("/:artifactId", authMiddleware, async (req, res) => {
     res.json({ message: "Removed from favorites" });
 
   } catch (error) {
+    console.error("Favorites Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });

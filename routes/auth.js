@@ -3,6 +3,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const authMiddleware = require("../middleware/auth");
+const adminMiddleware = require("../middleware/adminMiddleware");
 
 const router = express.Router();
 
@@ -31,6 +32,7 @@ router.post("/register", async (req, res) => {
     res.status(201).json({ message: "User registered successfully" });
 
   } catch (error) {
+    console.error("Register Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -65,6 +67,7 @@ router.post("/login", async (req, res) => {
     res.json({ token });
 
   } catch (error) {
+    console.error("Login Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -77,14 +80,15 @@ router.get("/me", authMiddleware, async (req, res) => {
     const user = await User.findById(req.user.id).select("-password");
     res.json(user);
   } catch (error) {
+    console.error("Get User Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
 
 /* =========================
-   Make Admin (Temporary)
+   Make Admin
 ========================= */
-router.put("/make-admin/:id", async (req, res) => {
+router.put("/make-admin/:id", authMiddleware, adminMiddleware, async (req, res) => {
   try {
     const user = await User.findByIdAndUpdate(
       req.params.id,
@@ -99,6 +103,7 @@ router.put("/make-admin/:id", async (req, res) => {
     res.json(user);
 
   } catch (error) {
+    console.error("Make Admin Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 });
