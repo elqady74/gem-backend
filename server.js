@@ -10,6 +10,7 @@ const aiRoutes = require("./routes/ai");
 const favoriteRoutes = require("./routes/favorites");
 const bookingRoutes = require("./routes/bookings");
 const eventRoutes = require("./routes/events");
+const uploadRoutes = require("./routes/upload");
 
 const app = express();
 
@@ -28,6 +29,7 @@ app.use("/api/ai", aiRoutes);
 app.use("/api/favorites", favoriteRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/events", eventRoutes);
+app.use("/api/upload", uploadRoutes);
 
 /* =========================
    MongoDB Connection
