@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const authMiddleware = require("../middleware/auth");
 const adminMiddleware = require("../middleware/adminMiddleware");
+const sendEmail = require("../utils/sendEmail");
 const { OAuth2Client } = require("google-auth-library");
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
@@ -125,6 +126,113 @@ router.post("/google", async (req, res) => {
   } catch (error) {
     console.error("Google Login Error:", error);
     res.status(401).json({ message: "Invalid Google token or unauthorized" });
+  }
+});
+
+/* =========================
+   Forgot Password (Send OTP)
+========================= */
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // تأكد أن الإيميل موجود ومسجل بشكل تقليدي ومش بس بجوجل (عنده باسوورد)
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: "There is no user with that email" });
+    }
+
+    // توليد كود مكون من 6 أرقام
+    const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // حفظ الكود في الداتا بيز مع وقت انتهاء (مثلاً بعد 30 دقيقة)
+    user.resetPasswordToken = resetCode;
+    user.resetPasswordExpire = Date.now() + 30 * 60 * 1000;
+    await user.save();
+
+    // إرسال الإيميل
+    const message = `الكود الخاص بإعادة تعيين كلمة المرور هو: ${resetCode}\nأو تجاهل هذا البريد إذا لم تكن أنت من طلب ذلك.`;
+
+    try {
+      await sendEmail({
+        email: user.email,
+        subject: "Password Reset Code",
+        message,
+        code: resetCode
+      });
+
+      res.status(200).json({ message: "Reset code sent to email" });
+    } catch (error) {
+      console.error("Sending email error:", error);
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save();
+
+      return res.status(500).json({ message: "Email could not be sent" });
+    }
+
+  } catch (error) {
+    console.error("Forgot Password Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* =========================
+   Verify OTP Code
+========================= */
+router.post("/verify-reset-code", async (req, res) => {
+  try {
+    const { email, code } = req.body;
+
+    const user = await User.findOne({
+      email,
+      resetPasswordToken: code,
+      resetPasswordExpire: { $gt: Date.now() } // التأكد من أن الكود لم تنتهِ صلاحيته
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired reset code" });
+    }
+
+    res.status(200).json({ message: "Code verified successfully! You can now reset your password." });
+
+  } catch (error) {
+    console.error("Verify Code Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* =========================
+   Reset Password
+========================= */
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { email, code, newPassword } = req.body;
+
+    const user = await User.findOne({
+      email,
+      resetPasswordToken: code,
+      resetPasswordExpire: { $gt: Date.now() }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired reset code" });
+    }
+
+    // تشفير كلمة المرور الجديدة
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // تحديث بيانات المستخدم
+    user.password = hashedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+
+    res.status(200).json({ message: "Password updated successfully" });
+
+  } catch (error) {
+    console.error("Reset Password Error:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });
 
