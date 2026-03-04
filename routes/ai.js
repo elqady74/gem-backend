@@ -39,7 +39,22 @@ router.post("/ask", authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error("AI Route Error:", error);
-    res.status(500).json({ message: "Server error" });
+    
+    // Check if it's an API authentication error
+    if (error.message && error.message.includes("401")) {
+      return res.status(401).json({ 
+        answer: `❌ Error: ${error.message}` 
+      });
+    }
+    
+    // Check if it's an API error
+    if (error.message && error.message.includes("فشل")) {
+      return res.status(500).json({ 
+        answer: `❌ Error: ${error.message}` 
+      });
+    }
+
+    res.status(500).json({ answer: "❌ Error: حدث خطأ في الخادم" });
   }
 });
 

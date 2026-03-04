@@ -33,7 +33,22 @@ async function generateAIResponse(question) {
     return answer;
   } catch (error) {
     console.error("AI Service Error:", error);
-    throw new Error("فشل الاتصال بخدمة الذكاء الاصطناعي (تأكد من إعدادات الموديل)");
+    
+    // Check for authentication errors from the API
+    if (error.response && error.response.status === 401) {
+      throw new Error(`❌ خطأ في المصادقة (401): ${error.response.data?.error?.message || 'فشل التحقق من بيانات API'}`);
+    }
+    
+    // Check for the specific "User not found" error
+    if (error.message && error.message.includes("User not found")) {
+      throw new Error(`❌ خطأ: مستخدم غير موجود - تحقق من صلاحية مفتاح OPENROUTER_API_KEY`);
+    }
+    
+    if (error.message && error.message.includes("401")) {
+      throw new Error(`❌ خطأ في المصادقة: ${error.message}`);
+    }
+    
+    throw new Error(`❌ فشل الاتصال بخدمة الذكاء الاصطناعي: ${error.message}`);
   }
 }
 
