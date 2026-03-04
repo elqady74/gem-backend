@@ -43,8 +43,8 @@ router.post("/checkout", authMiddleware, async (req, res) => {
     });
 
     // 4. Create Stripe Checkout Session
-    // We get the frontend URL from env, or fallback to localhost:3000
-    const frontendURL = process.env.FRONTEND_URL || "http://localhost:3000";
+    // We get the frontend URL from env, or fallback to the provided railway URL
+    const frontendURL = process.env.FRONTEND_URL || "https://gem-backend-production.up.railway.app";
 
     // Prepare line items for Stripe
     const line_items = tickets.map(ticket => {
