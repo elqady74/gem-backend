@@ -14,6 +14,7 @@ const artifactSchema = new mongoose.Schema({
 
   model3DUrl: String,   // 👈 3D model
   audioUrl: String,     // 👈 voice over
+  videoUrl: String,     // 👈 video 
 
 }, { timestamps: true });
 
