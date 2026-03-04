@@ -13,7 +13,7 @@ async function generateAIResponse(question) {
     const result = await client.predict("/chat_with_gem_1", {
       message: question,                 // 1. السؤال
       history: [],                       // 2. المحادثات السابقة (نرسلها فارغة حالياً)
-      api_key_input: process.env.HF_TOKEN, // 3. مفتاح API للنموذج (كما طُلب)
+      api_key_input: process.env.OPENROUTER_API_KEY, // 3. مفتاح API للنموذج (OpenRouter)
       provider_choice: "openrouter",     // 4. المزود
       image: null,                       // 5. صورة (لا يوجد)
     });
