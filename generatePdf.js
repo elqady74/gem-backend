@@ -63,6 +63,13 @@ doc.fontSize(16).font('Helvetica-Bold').text('6. Events').moveDown(0.5);
 addEndpoint('GET', '/api/events', 'No', 'Get all events', null);
 addEndpoint('POST', '/api/events', 'Yes (Admin)', 'Create a new event', '{\n  "title": "Museum Opening",\n  "description": "Big event",\n  "date": "2026-05-01"\n}');
 
+// 7. Booking & Payments
+doc.fontSize(16).font('Helvetica-Bold').text('7. Booking & Payment (Stripe)').moveDown(0.5);
+addEndpoint('POST', '/api/bookings/checkout', 'Yes', 'Create a booking and a Stripe Checkout Session', '{\n  "visitDate": "2026-06-01",\n  "nationalityType": "egyptian",\n  "tickets": [\n    { "category": "Adult", "quantity": 2, "price": 100 },\n    { "category": "Student", "quantity": 1, "price": 50 }\n  ]\n}');
+addEndpoint('POST', '/api/bookings/verify-payment', 'Yes', 'Verify payment after returning from Stripe', '{\n  "sessionId": "cs_test_..."\n}');
+addEndpoint('GET', '/api/bookings/my-bookings', 'Yes', 'Get user\'s personal bookings', null);
+addEndpoint('GET', '/api/bookings', 'Yes (Admin)', 'Get all bookings (for Dashboard)', null);
+
 // Finalize PDF file
 doc.end();
 console.log('PDF Generated Successfully as API_Documentation.pdf');
