@@ -6,7 +6,7 @@ const adminMiddleware = require("../middleware/adminMiddleware");
 
 const router = express.Router();
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder");
 
 /* =========================
    Ticket Pricing
