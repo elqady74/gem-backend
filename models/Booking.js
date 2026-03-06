@@ -30,9 +30,19 @@ const bookingSchema = new mongoose.Schema({
   tax: Number,
   total: Number,
 
+  paymobOrderId: {
+    type: String,
+    default: null
+  },
+
+  paymobTransactionId: {
+    type: String,
+    default: null
+  },
+
   paymentStatus: {
     type: String,
-    enum: ["pending", "paid"],
+    enum: ["pending", "paid", "cancelled", "failed"],
     default: "pending"
   }
 
