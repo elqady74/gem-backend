@@ -7,7 +7,15 @@ const detectionSchema = new mongoose.Schema({
     required: true
   },
   imageName: String,
-  detectedArtifact: String
+  detectedArtifact: String,
+  confidence: {
+    type: Number,
+    default: null
+  },
+  details: {
+    type: mongoose.Schema.Types.Mixed,
+    default: null
+  }
 }, { timestamps: true });
 
 module.exports = mongoose.model("Detection", detectionSchema);

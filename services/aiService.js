@@ -1,22 +1,37 @@
 // services/aiService.js
-const { Client } = require("@gradio/client");
 
 async function generateAIResponse(question) {
   try {
-    // الاتصال بمساحة Hugging Face المُقدمة باستخدام مفتاح الـ API للـ Client
-    const client = await Client.connect("rana589/chat-bot", {
-      hf_token: process.env.HF_TOKEN
-    });
+    // Dynamically import ES Module
+    const { Client } = await import("@gradio/client");
 
-    // استدعاء المسار الحقيقي الذي وجدناه في الـ API: /chat_with_gem_1
-    // يجب تمرير برامترات محددة بالترتيب بناءً على بناء الموديل
-    const result = await client.predict("/chat_with_gem_1", {
-      message: question,                 // 1. السؤال
-      history: [],                       // 2. المحادثات السابقة (نرسلها فارغة حالياً)
-      api_key_input: process.env.OPENROUTER_API_KEY, // 3. مفتاح API للنموذج (OpenRouter)
-      provider_choice: "openrouter",     // 4. المزود
-      image: null,                       // 5. صورة (لا يوجد)
-    });
+    const withTimeout = (promise, ms, errorMsg) => {
+      let timer;
+      const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(errorMsg)), ms);
+      });
+      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+    };
+
+    // الاتصال بمساحة Hugging Face المُقدمة باستخدام مفتاح الـ API للـ Client
+    const client = await withTimeout(
+      Client.connect("rana589/chat-bot", { hf_token: process.env.HF_TOKEN }),
+      20000,
+      "HuggingFace Space connection timed out (Token might be invalid)"
+    );
+
+    // استدعاء المسار الحقيقي
+    const result = await withTimeout(
+      client.predict("/chat_with_gem_1", {
+        message: question,
+        history: [],
+        api_key_input: process.env.OPENROUTER_API_KEY,
+        provider_choice: "openrouter",
+        image: null,
+      }),
+      30000,
+      "AI generation timed out (OpenRouter Key might be invalid)"
+    );
 
     // الرد عبارة عن مصفوفة تاريخ الشات `history`. الإجابة الأخيرة ستكون في آخر عنصر من المصفوفة، دور `assistant`
     let answer = "عذراً، لم أتمكن من إيجاد إجابة.";
