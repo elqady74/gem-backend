@@ -282,10 +282,10 @@ router.post("/name-to-cartouche", authMiddleware, async (req, res) => {
 
     // Predict with 30s timeout
     const result = await withTimeout(
-      client.predict("/predict", {
-        name: name,
-        api_key: openrouterKey
-      }),
+      client.predict("/generate_cartouche", [
+        name,
+        openrouterKey
+      ]),
       30000,
       "Cartouche generation timed out (OpenRouter API Key might be invalid)"
     );
