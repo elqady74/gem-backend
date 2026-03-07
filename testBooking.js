@@ -5,7 +5,7 @@ const jwt = require("jsonwebtoken");
 /* =========================
    Config
 ========================= */
-const BASE_URL = "http://localhost:5000/api/bookings";
+const BASE_URL = process.env.TEST_BASE_URL || "https://gem-backend-production.up.railway.app/api/bookings";
 const dummyUserId = "60c72b2f9b1d8b00155b4a3a";
 const token = jwt.sign(
     { id: dummyUserId, role: "user" },

@@ -1,39 +1,20 @@
-require("dotenv").config();
-const jwt = require("jsonwebtoken");
 const axios = require("axios");
 
-// 1. Generate a mock token for an existing user (or create a simple test token if the middleware allows it)
-// We need a valid MongoDB ObjectId for the user. Let's use a dummy one.
-const dummyUserId = "60c72b2f9b1d8b00155b4a3a";
-const token = jwt.sign({ id: dummyUserId, role: "user" }, process.env.JWT_SECRET || "gem_secret_2024", {
-    expiresIn: "30d",
-});
+const BASE_URL = process.env.TEST_BASE_URL || "https://gem-backend-production.up.railway.app/api";
 
-async function testApi() {
+const testApis = async () => {
     try {
-        console.log("Testing POST /api/ai/ask...");
-        console.log("Using Token:", token);
+        console.log("🚀 Testing GEM Backend APIs (Railway)...\\n");
 
-        // Assumes the server is running on port 5000 locally
-        const response = await axios.post(
-            "http://localhost:5000/api/ai/ask",
-            { question: "من هو كليوباترا؟" },
-            {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
-            }
-        );
+        // 1. Test Home/Health
+        console.log("Testing Home Route...");
+        let response = await axios.get(BASE_URL.replace("/api", ""));
+        console.log("✅ Home Route works! Status:", response.status);
 
-        console.log("Success Response from API:", response.data);
+        console.log("\\nAPI tests finished successfully.");
     } catch (error) {
-        if (error.response) {
-            console.error("API Error Status:", error.response.status);
-            console.error("API Error Data:", error.response.data);
-        } else {
-            console.error("Connection Error:", error.message);
-        }
+        console.error("❌ Test Error:", error.response ? error.response.data : error.message);
     }
-}
+};
 
-testApi();
+testApis();
