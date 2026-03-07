@@ -403,25 +403,87 @@ router.post(
 );
 
 /* ============================================================
-   8. Text-to-Speech (Placeholder)
+   8. Text-to-Speech (Samaelgendy Tts1)
+      Inputs: statueId (Number/String), language ('ar' or 'en')
 ============================================================ */
 router.post("/text-to-speech", authMiddleware, async (req, res) => {
   try {
-    const { text } = req.body;
+    const { statueId, language } = req.body;
 
-    if (!text || !text.trim()) {
-      return res.status(400).json({ message: "Text is required" });
+    if (!statueId) {
+      return res.status(400).json({ message: "statueId is required" });
     }
 
-    // Placeholder — will be connected to TTS model later
-    res.status(202).json({
-      message: "Text-to-Speech feature is coming soon",
-      status: "placeholder",
-      text
+    const ttsSpace = process.env.TTS_HF_SPACE || "samaelgendy/Tts1";
+    const ttsToken = process.env.TTS_HF_TOKEN;
+    const openrouterKey = process.env.TTS_OPENROUTER_KEY;
+
+    // language mapping ("ar" -> "🇪🇬 عربي", "en" -> "🇬🇧 English")
+    const langFormatted = (language === "en") ? "🇬🇧 English" : "🇪🇬 عربي";
+    const statueFormatted = `[${statueId}]`;
+
+    // Dynamically import ES Module
+    const { Client } = await import("@gradio/client");
+
+    const withTimeout = (promise, ms, errorMsg) => {
+      let timer;
+      const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(errorMsg)), ms);
+      });
+      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+    };
+
+    // Connect
+    const client = await withTimeout(
+      Client.connect(ttsSpace, { hf_token: ttsToken }),
+      20000,
+      "TTS HuggingFace Space connection timed out"
+    );
+
+    // Predict: /play_statue takes [statue_label, language]
+    const result = await withTimeout(
+      client.predict("/play_statue", [
+        statueFormatted,
+        langFormatted
+      ]),
+      30000,
+      "TTS generation timed out"
+    );
+
+    const data = result.data;
+
+    // Gradio returns: [info_text, text, audio_path]
+    // The audio_path could be a file object { path, url }
+    if (!data || data.length < 3) {
+      return res.status(500).json({ message: "Invalid response from TTS model", data });
+    }
+
+    const infoText = data[0];
+    const scriptText = data[1];
+    let audioOutput = data[2];
+
+    if (infoText && infoText.includes("ارفع ملف الإكسيل")) {
+      return res.status(400).json({
+        message: "TTS Model Error: The HuggingFace space requires the Excel file to be uploaded by the admin first.",
+        rawError: infoText
+      });
+    }
+
+    if (typeof audioOutput === "object" && audioOutput?.url) {
+      audioOutput = audioOutput.url;
+    } else if (typeof audioOutput === "object" && audioOutput?.path) {
+      audioOutput = audioOutput.path;
+    }
+
+    res.json({
+      info: infoText,
+      text: scriptText,
+      audioUrl: audioOutput
     });
 
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    console.error("TTS Error:", error.message);
+    res.status(500).json({ message: "Text-to-Speech generation failed", details: error.message });
   }
 });
 
