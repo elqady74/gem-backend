@@ -250,6 +250,73 @@ router.get("/me", authMiddleware, async (req, res) => {
 });
 
 /* =========================
+   Update Profile
+========================= */
+router.put("/me", authMiddleware, async (req, res) => {
+  try {
+    const { name, avatar, language, oldPassword, newPassword } = req.body;
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Update name (if provided)
+    if (name && name.trim()) {
+      user.name = name.trim();
+    }
+
+    // Update avatar (if provided)
+    if (avatar !== undefined) {
+      user.avatar = avatar;
+    }
+
+    // Update language (if provided)
+    if (language) {
+      if (!["en", "ar"].includes(language)) {
+        return res.status(400).json({ message: "Language must be 'en' or 'ar'" });
+      }
+      user.language = language;
+    }
+
+    // Update password (if provided)
+    if (newPassword) {
+      if (!oldPassword) {
+        return res.status(400).json({ message: "Old password is required to set a new password" });
+      }
+
+      // Google-only users might not have a password
+      if (!user.password) {
+        return res.status(400).json({ message: "Cannot change password for Google-only accounts" });
+      }
+
+      const isMatch = await bcrypt.compare(oldPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({ message: "Old password is incorrect" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ message: "New password must be at least 6 characters" });
+      }
+
+      user.password = await bcrypt.hash(newPassword, 10);
+    }
+
+    await user.save();
+
+    // Return updated user without password
+    const updatedUser = user.toObject();
+    delete updatedUser.password;
+
+    res.json({ message: "Profile updated successfully", user: updatedUser });
+
+  } catch (error) {
+    console.error("Update Profile Error:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* =========================
    Make Admin
 ========================= */
 router.put("/make-admin/:id", authMiddleware, adminMiddleware, async (req, res) => {

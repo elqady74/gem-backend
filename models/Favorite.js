@@ -6,11 +6,19 @@ const favoriteSchema = new mongoose.Schema({
     ref: "User",
     required: true
   },
-  artifact: {
+  itemId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Artifact",
-    required: true
+    required: true,
+    refPath: "itemType"
+  },
+  itemType: {
+    type: String,
+    required: true,
+    enum: ["Artifact", "Event"]
   }
 }, { timestamps: true });
+
+// Compound unique index — prevents duplicate favorites at DB level
+favoriteSchema.index({ user: 1, itemId: 1, itemType: 1 }, { unique: true });
 
 module.exports = mongoose.model("Favorite", favoriteSchema);
