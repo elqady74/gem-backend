@@ -6,6 +6,7 @@ const authMiddleware = require("../middleware/auth");
 const adminMiddleware = require("../middleware/adminMiddleware");
 const sendEmail = require("../utils/sendEmail");
 const { OAuth2Client } = require("google-auth-library");
+const { t } = require("../utils/i18n");
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -20,7 +21,7 @@ router.post("/register", async (req, res) => {
 
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
+      return res.status(400).json({ message: t(req, "user_already_exists") });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -33,11 +34,11 @@ router.post("/register", async (req, res) => {
 
     await newUser.save();
 
-    res.status(201).json({ message: "User registered successfully" });
+    res.status(201).json({ message: t(req, "user_registered") });
 
   } catch (error) {
     console.error("Register Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -50,12 +51,12 @@ router.post("/login", async (req, res) => {
 
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(400).json({ message: t(req, "invalid_credentials") });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(400).json({ message: t(req, "invalid_credentials") });
     }
 
     const token = jwt.sign(
@@ -72,7 +73,7 @@ router.post("/login", async (req, res) => {
 
   } catch (error) {
     console.error("Login Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -84,7 +85,7 @@ router.post("/google", async (req, res) => {
     const { tokenId } = req.body;
 
     if (!tokenId) {
-      return res.status(400).json({ message: "Google token is required" });
+      return res.status(400).json({ message: t(req, "google_token_required") });
     }
 
     const ticket = await client.verifyIdToken({
@@ -125,7 +126,7 @@ router.post("/google", async (req, res) => {
 
   } catch (error) {
     console.error("Google Login Error:", error);
-    res.status(401).json({ message: "Invalid Google token or unauthorized" });
+    res.status(401).json({ message: t(req, "invalid_google_token") });
   }
 });
 
@@ -136,16 +137,15 @@ router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
 
-    // تأكد أن الإيميل موجود ومسجل بشكل تقليدي ومش بس بجوجل (عنده باسوورد)
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ message: "There is no user with that email" });
+      return res.status(404).json({ message: t(req, "no_user_with_email") });
     }
 
     // توليد كود مكون من 6 أرقام
     const resetCode = Math.floor(100000 + Math.random() * 900000).toString();
 
-    // حفظ الكود في الداتا بيز مع وقت انتهاء (مثلاً بعد 30 دقيقة)
+    // حفظ الكود في الداتا بيز مع وقت انتهاء (بعد 30 دقيقة)
     user.resetPasswordToken = resetCode;
     user.resetPasswordExpire = Date.now() + 30 * 60 * 1000;
     await user.save();
@@ -161,19 +161,19 @@ router.post("/forgot-password", async (req, res) => {
         code: resetCode
       });
 
-      res.status(200).json({ message: "Reset code sent to email" });
+      res.status(200).json({ message: t(req, "reset_code_sent") });
     } catch (error) {
       console.error("Sending email error:", error);
       user.resetPasswordToken = undefined;
       user.resetPasswordExpire = undefined;
       await user.save();
 
-      return res.status(500).json({ message: "Email could not be sent" });
+      return res.status(500).json({ message: t(req, "email_not_sent") });
     }
 
   } catch (error) {
     console.error("Forgot Password Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -187,18 +187,18 @@ router.post("/verify-reset-code", async (req, res) => {
     const user = await User.findOne({
       email,
       resetPasswordToken: code,
-      resetPasswordExpire: { $gt: Date.now() } // التأكد من أن الكود لم تنتهِ صلاحيته
+      resetPasswordExpire: { $gt: Date.now() }
     });
 
     if (!user) {
-      return res.status(400).json({ message: "Invalid or expired reset code" });
+      return res.status(400).json({ message: t(req, "invalid_or_expired_code") });
     }
 
-    res.status(200).json({ message: "Code verified successfully! You can now reset your password." });
+    res.status(200).json({ message: t(req, "code_verified") });
 
   } catch (error) {
     console.error("Verify Code Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -216,7 +216,7 @@ router.post("/reset-password", async (req, res) => {
     });
 
     if (!user) {
-      return res.status(400).json({ message: "Invalid or expired reset code" });
+      return res.status(400).json({ message: t(req, "invalid_or_expired_code") });
     }
 
     // تشفير كلمة المرور الجديدة
@@ -228,11 +228,11 @@ router.post("/reset-password", async (req, res) => {
     user.resetPasswordExpire = undefined;
     await user.save();
 
-    res.status(200).json({ message: "Password updated successfully" });
+    res.status(200).json({ message: t(req, "password_updated") });
 
   } catch (error) {
     console.error("Reset Password Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -245,7 +245,7 @@ router.get("/me", authMiddleware, async (req, res) => {
     res.json(user);
   } catch (error) {
     console.error("Get User Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -258,7 +258,7 @@ router.put("/me", authMiddleware, async (req, res) => {
 
     const user = await User.findById(req.user.id);
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ message: t(req, "user_not_found") });
     }
 
     // Update name (if provided)
@@ -274,7 +274,7 @@ router.put("/me", authMiddleware, async (req, res) => {
     // Update language (if provided)
     if (language) {
       if (!["en", "ar"].includes(language)) {
-        return res.status(400).json({ message: "Language must be 'en' or 'ar'" });
+        return res.status(400).json({ message: t(req, "language_must_be_en_or_ar") });
       }
       user.language = language;
     }
@@ -282,21 +282,21 @@ router.put("/me", authMiddleware, async (req, res) => {
     // Update password (if provided)
     if (newPassword) {
       if (!oldPassword) {
-        return res.status(400).json({ message: "Old password is required to set a new password" });
+        return res.status(400).json({ message: t(req, "old_password_required") });
       }
 
       // Google-only users might not have a password
       if (!user.password) {
-        return res.status(400).json({ message: "Cannot change password for Google-only accounts" });
+        return res.status(400).json({ message: t(req, "cannot_change_google_password") });
       }
 
       const isMatch = await bcrypt.compare(oldPassword, user.password);
       if (!isMatch) {
-        return res.status(400).json({ message: "Old password is incorrect" });
+        return res.status(400).json({ message: t(req, "old_password_incorrect") });
       }
 
       if (newPassword.length < 6) {
-        return res.status(400).json({ message: "New password must be at least 6 characters" });
+        return res.status(400).json({ message: t(req, "new_password_min_length") });
       }
 
       user.password = await bcrypt.hash(newPassword, 10);
@@ -308,11 +308,11 @@ router.put("/me", authMiddleware, async (req, res) => {
     const updatedUser = user.toObject();
     delete updatedUser.password;
 
-    res.json({ message: "Profile updated successfully", user: updatedUser });
+    res.json({ message: t(req, "profile_updated"), user: updatedUser });
 
   } catch (error) {
     console.error("Update Profile Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -328,14 +328,14 @@ router.put("/make-admin/:id", authMiddleware, adminMiddleware, async (req, res) 
     );
 
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+      return res.status(404).json({ message: t(req, "user_not_found") });
     }
 
     res.json(user);
 
   } catch (error) {
     console.error("Make Admin Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 

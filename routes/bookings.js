@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const Booking = require("../models/Booking");
 const authMiddleware = require("../middleware/authMiddleware");
 const adminMiddleware = require("../middleware/adminMiddleware");
+const { t } = require("../utils/i18n");
 
 const router = express.Router();
 
@@ -39,32 +40,36 @@ const PRICES = {
 /* =========================
    Validation Helpers
 ========================= */
-function validateTickets(tickets, nationalityType) {
+function validateTickets(tickets, nationalityType, req) {
   const validCategories = Object.keys(PRICES[nationalityType]);
 
   for (const ticket of tickets) {
     if (!validCategories.includes(ticket.category)) {
-      return `Invalid ticket category "${ticket.category}" for nationality "${nationalityType}". Valid: ${validCategories.join(", ")}`;
+      return t(req, "invalid_ticket_category", {
+        category: ticket.category,
+        nationality: nationalityType,
+        valid: validCategories.join(", ")
+      });
     }
     if (!Number.isInteger(ticket.quantity) || ticket.quantity <= 0) {
-      return `Invalid quantity for "${ticket.category}". Must be a positive integer`;
+      return t(req, "invalid_ticket_quantity", { category: ticket.category });
     }
   }
 
   return null;
 }
 
-function validateVisitDate(visitDate) {
+function validateVisitDate(visitDate, req) {
   const date = new Date(visitDate);
   if (isNaN(date.getTime())) {
-    return "Invalid visit date format";
+    return t(req, "invalid_visit_date");
   }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   if (date < today) {
-    return "Visit date cannot be in the past";
+    return t(req, "visit_date_past");
   }
 
   return null;
@@ -129,21 +134,21 @@ router.post("/checkout", authMiddleware, async (req, res) => {
 
     // --- Basic validation ---
     if (!visitDate || !nationalityType || !tickets?.length) {
-      return res.status(400).json({ message: "Missing booking data" });
+      return res.status(400).json({ message: t(req, "missing_booking_data") });
     }
 
     if (!PRICES[nationalityType]) {
-      return res.status(400).json({ message: "Invalid nationality type" });
+      return res.status(400).json({ message: t(req, "invalid_nationality_type") });
     }
 
     // --- Visit date validation ---
-    const dateError = validateVisitDate(visitDate);
+    const dateError = validateVisitDate(visitDate, req);
     if (dateError) {
       return res.status(400).json({ message: dateError });
     }
 
     // --- Ticket validation ---
-    const ticketError = validateTickets(tickets, nationalityType);
+    const ticketError = validateTickets(tickets, nationalityType, req);
     if (ticketError) {
       return res.status(400).json({ message: ticketError });
     }
@@ -231,7 +236,7 @@ router.post("/checkout", authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error("Checkout Error:", error.response?.data || error.message);
-    res.status(500).json({ message: "Server error", details: error.response?.data || error.message });
+    res.status(500).json({ message: t(req, "server_error"), details: error.response?.data || error.message });
   }
 });
 
@@ -246,7 +251,7 @@ router.post("/verify-payment", authMiddleware, async (req, res) => {
     const { orderId, transactionId } = req.body;
 
     if (!orderId) {
-      return res.status(400).json({ message: "Missing orderId" });
+      return res.status(400).json({ message: t(req, "missing_order_id") });
     }
 
     // --- Find booking by Paymob order ---
@@ -256,13 +261,13 @@ router.post("/verify-payment", authMiddleware, async (req, res) => {
     });
 
     if (!booking) {
-      return res.status(404).json({ message: "Booking not found" });
+      return res.status(404).json({ message: t(req, "booking_not_found") });
     }
 
     // --- Prevent double verification ---
     if (booking.paymentStatus === "paid") {
       return res.json({
-        message: "Payment already verified",
+        message: t(req, "payment_already_verified"),
         booking
       });
     }
@@ -287,12 +292,12 @@ router.post("/verify-payment", authMiddleware, async (req, res) => {
       await booking.save();
 
       return res.json({
-        message: "Payment successful",
+        message: t(req, "payment_successful"),
         booking
       });
     } else {
       return res.status(400).json({
-        message: "Payment not completed",
+        message: t(req, "payment_not_completed"),
         paidAmount: orderData.paid_amount_cents / 100,
         expectedAmount: booking.total
       });
@@ -300,7 +305,7 @@ router.post("/verify-payment", authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error("Verify Payment Error:", error.response?.data || error.message);
-    res.status(500).json({ message: "Verification error" });
+    res.status(500).json({ message: t(req, "verification_error") });
   }
 
 });
@@ -348,14 +353,14 @@ router.post("/webhook", async (req, res) => {
 
       if (computedHmac !== req.query.hmac) {
         console.error("Webhook HMAC mismatch");
-        return res.status(403).json({ message: "Invalid HMAC" });
+        return res.status(403).json({ message: t(req, "invalid_hmac") });
       }
     }
 
     // --- Process the transaction ---
     const transaction = payload.obj;
     if (!transaction || !transaction.order?.id) {
-      return res.status(400).json({ message: "Invalid webhook data" });
+      return res.status(400).json({ message: t(req, "invalid_webhook_data") });
     }
 
     const booking = await Booking.findOne({
@@ -363,7 +368,7 @@ router.post("/webhook", async (req, res) => {
     });
 
     if (!booking) {
-      return res.status(404).json({ message: "Booking not found" });
+      return res.status(404).json({ message: t(req, "booking_not_found") });
     }
 
     if (transaction.success === true) {
@@ -377,11 +382,11 @@ router.post("/webhook", async (req, res) => {
     booking.paymobTransactionId = transaction.id?.toString();
     await booking.save();
 
-    res.json({ message: "Webhook processed" });
+    res.json({ message: t(req, "webhook_processed") });
 
   } catch (error) {
     console.error("Webhook Error:", error.message);
-    res.status(500).json({ message: "Webhook error" });
+    res.status(500).json({ message: t(req, "webhook_error") });
   }
 
 });
@@ -401,7 +406,7 @@ router.get("/my-bookings", authMiddleware, async (req, res) => {
     res.json(bookings);
 
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 
 });
@@ -420,13 +425,13 @@ router.get("/:id", authMiddleware, async (req, res) => {
     });
 
     if (!booking) {
-      return res.status(404).json({ message: "Booking not found" });
+      return res.status(404).json({ message: t(req, "booking_not_found") });
     }
 
     res.json(booking);
 
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 
 });
@@ -447,7 +452,7 @@ router.get("/", authMiddleware, adminMiddleware, async (req, res) => {
     res.json(bookings);
 
   } catch (error) {
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 
 });

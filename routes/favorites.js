@@ -1,6 +1,7 @@
 const express = require("express");
 const authMiddleware = require("../middleware/authMiddleware");
 const Favorite = require("../models/Favorite");
+const { t } = require("../utils/i18n");
 
 const router = express.Router();
 
@@ -24,7 +25,7 @@ router.post("/:itemId", authMiddleware, async (req, res) => {
     const itemType = normalizeType(req.body.type || req.query.type) || "Artifact";
 
     if (!VALID_TYPES.includes(itemType)) {
-      return res.status(400).json({ message: "Invalid type. Must be 'Artifact' or 'Event'" });
+      return res.status(400).json({ message: t(req, "invalid_favorite_type") });
     }
 
     const existing = await Favorite.findOne({
@@ -34,7 +35,7 @@ router.post("/:itemId", authMiddleware, async (req, res) => {
     });
 
     if (existing) {
-      return res.status(400).json({ message: "Already in favorites" });
+      return res.status(400).json({ message: t(req, "already_in_favorites") });
     }
 
     const favorite = await Favorite.create({
@@ -47,7 +48,7 @@ router.post("/:itemId", authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error("Favorites Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -72,7 +73,7 @@ router.get("/my", authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error("Favorites Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -93,7 +94,7 @@ router.get("/count", authMiddleware, async (req, res) => {
     res.json({ count });
   } catch (error) {
     console.error("Favorites Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -115,7 +116,7 @@ router.get("/check/:itemId", authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error("Favorites Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -129,7 +130,7 @@ router.post("/toggle/:itemId", authMiddleware, async (req, res) => {
     const itemType = normalizeType(req.body.type || req.query.type) || "Artifact";
 
     if (!VALID_TYPES.includes(itemType)) {
-      return res.status(400).json({ message: "Invalid type. Must be 'Artifact' or 'Event'" });
+      return res.status(400).json({ message: t(req, "invalid_favorite_type") });
     }
 
     const existing = await Favorite.findOne({
@@ -140,7 +141,7 @@ router.post("/toggle/:itemId", authMiddleware, async (req, res) => {
 
     if (existing) {
       await Favorite.findByIdAndDelete(existing._id);
-      return res.json({ isFavorited: false, message: "Removed from favorites" });
+      return res.json({ isFavorited: false, message: t(req, "removed_from_favorites") });
     }
 
     await Favorite.create({
@@ -149,11 +150,11 @@ router.post("/toggle/:itemId", authMiddleware, async (req, res) => {
       itemType
     });
 
-    res.json({ isFavorited: true, message: "Added to favorites" });
+    res.json({ isFavorited: true, message: t(req, "added_to_favorites") });
 
   } catch (error) {
     console.error("Favorites Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -172,14 +173,14 @@ router.delete("/:itemId", authMiddleware, async (req, res) => {
     });
 
     if (!deleted) {
-      return res.status(404).json({ message: "Favorite not found" });
+      return res.status(404).json({ message: t(req, "favorite_not_found") });
     }
 
-    res.json({ message: "Removed from favorites" });
+    res.json({ message: t(req, "removed_from_favorites") });
 
   } catch (error) {
     console.error("Favorites Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 

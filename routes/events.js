@@ -1,6 +1,7 @@
 const express = require("express");
 const authMiddleware = require("../middleware/authMiddleware");
 const Event = require("../models/Event");
+const { t } = require("../utils/i18n");
 
 const router = express.Router();
 
@@ -13,7 +14,7 @@ router.get("/", async (req, res) => {
     res.json(events);
   } catch (error) {
     console.error("Events Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -23,7 +24,7 @@ router.get("/", async (req, res) => {
 router.post("/", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ message: t(req, "access_denied") });
     }
 
     const { title, description, date, imageUrl } = req.body;
@@ -39,7 +40,7 @@ router.post("/", authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error("Events Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -49,16 +50,16 @@ router.post("/", authMiddleware, async (req, res) => {
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Access denied" });
+      return res.status(403).json({ message: t(req, "access_denied") });
     }
 
     await Event.findByIdAndDelete(req.params.id);
 
-    res.json({ message: "Event deleted" });
+    res.json({ message: t(req, "event_deleted") });
 
   } catch (error) {
     console.error("Events Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 

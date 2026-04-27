@@ -2,6 +2,7 @@ const express = require("express");
 const Artifact = require("../models/Artifact");
 const authMiddleware = require("../middleware/authMiddleware");
 const adminMiddleware = require("../middleware/adminMiddleware");
+const { t } = require("../utils/i18n");
 
 const router = express.Router();
 
@@ -15,7 +16,7 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res) => {
     res.status(201).json(newArtifact);
   } catch (error) {
     console.error("Artifacts Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -28,7 +29,7 @@ router.get("/", async (req, res) => {
     res.json(artifacts);
   } catch (error) {
     console.error("Artifacts Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -40,13 +41,13 @@ router.get("/:id", async (req, res) => {
     const artifact = await Artifact.findById(req.params.id);
 
     if (!artifact) {
-      return res.status(404).json({ message: "Artifact not found" });
+      return res.status(404).json({ message: t(req, "artifact_not_found") });
     }
 
     res.json(artifact);
   } catch (error) {
     console.error("Artifacts Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -62,14 +63,14 @@ router.put("/:id", authMiddleware, adminMiddleware, async (req, res) => {
     );
 
     if (!updatedArtifact) {
-      return res.status(404).json({ message: "Artifact not found" });
+      return res.status(404).json({ message: t(req, "artifact_not_found") });
     }
 
     res.json(updatedArtifact);
 
   } catch (error) {
     console.error("Artifacts Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -81,14 +82,14 @@ router.delete("/:id", authMiddleware, adminMiddleware, async (req, res) => {
     const deletedArtifact = await Artifact.findByIdAndDelete(req.params.id);
 
     if (!deletedArtifact) {
-      return res.status(404).json({ message: "Artifact not found" });
+      return res.status(404).json({ message: t(req, "artifact_not_found") });
     }
 
-    res.json({ message: "Artifact deleted successfully" });
+    res.json({ message: t(req, "artifact_deleted") });
 
   } catch (error) {
     console.error("Artifacts Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 

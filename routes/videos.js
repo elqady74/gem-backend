@@ -1,5 +1,6 @@
 const express = require("express");
 const Video = require("../models/Video");
+const { t } = require("../utils/i18n");
 const router = express.Router();
 
 router.post("/add", async (req, res) => {
@@ -16,7 +17,7 @@ router.post("/add", async (req, res) => {
     res.json(video);
   } catch (err) {
     console.log(err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 

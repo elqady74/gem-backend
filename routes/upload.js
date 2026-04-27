@@ -3,6 +3,7 @@ const multer = require("multer");
 const streamifier = require("streamifier");
 const cloudinary = require("../config/cloudinary");
 const Video = require("../models/Video");
+const { t } = require("../utils/i18n");
 
 const router = express.Router();
 
@@ -14,7 +15,7 @@ const upload = multer({
 router.post("/video", upload.single("video"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
+      return res.status(400).json({ message: t(req, "no_file_uploaded") });
     }
 
     const streamUpload = () => {
@@ -47,7 +48,7 @@ router.post("/video", upload.single("video"), async (req, res) => {
 
   } catch (err) {
     console.log(err);
-    res.status(500).json({ message: "Upload failed" });
+    res.status(500).json({ message: t(req, "upload_failed") });
   }
 });
 

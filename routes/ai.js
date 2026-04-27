@@ -8,6 +8,7 @@ const authMiddleware = require("../middleware/authMiddleware");
 const Chat = require("../models/Chat");
 const Artifact = require("../models/Artifact");
 const Detection = require("../models/Detection");
+const { t } = require("../utils/i18n");
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ router.post("/ask", authMiddleware, async (req, res) => {
     const { question } = req.body;
 
     if (!question) {
-      return res.status(400).json({ message: "Question is required" });
+      return res.status(400).json({ message: t(req, "question_required") });
     }
 
     const answer = await generateAIResponse(question);
@@ -62,7 +63,7 @@ router.post("/ask", authMiddleware, async (req, res) => {
       });
     }
 
-    res.status(500).json({ answer: "❌ Error: حدث خطأ في الخادم" });
+    res.status(500).json({ answer: `❌ ${t(req, "server_error")}` });
   }
 });
 
@@ -76,7 +77,7 @@ router.get("/chats", authMiddleware, async (req, res) => {
     res.json(chats);
   } catch (error) {
     console.error("AI Route Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -91,14 +92,14 @@ router.post(
   async (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ message: "Image is required" });
+        return res.status(400).json({ message: t(req, "image_required") });
       }
 
       const detectionApiUrl = process.env.DETECTION_API_URL;
 
       if (!detectionApiUrl || detectionApiUrl === "YOUR_NGROK_DETECTION_URL") {
         return res.status(503).json({
-          message: "Detection API is not configured. Set DETECTION_API_URL in .env"
+          message: t(req, "detection_api_not_configured")
         });
       }
 
@@ -152,11 +153,11 @@ router.post(
 
       if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
         return res.status(503).json({
-          message: "Detection API is offline. The ngrok tunnel may need to be restarted."
+          message: t(req, "detection_api_offline")
         });
       }
 
-      res.status(500).json({ message: "Detection failed", details: error.message });
+      res.status(500).json({ message: t(req, "detection_failed"), details: error.message });
     }
   }
 );
@@ -171,7 +172,7 @@ router.get("/detections", authMiddleware, async (req, res) => {
     res.json(detections);
   } catch (error) {
     console.error("AI Route Error:", error);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: t(req, "server_error") });
   }
 });
 
@@ -184,14 +185,14 @@ router.post("/story-to-image", authMiddleware, async (req, res) => {
     const { story } = req.body;
 
     if (!story || !story.trim()) {
-      return res.status(400).json({ message: "Story text is required" });
+      return res.status(400).json({ message: t(req, "story_required") });
     }
 
     const apiUrl = process.env.STORY_TO_IMAGE_API_URL;
 
     if (!apiUrl || apiUrl === "YOUR_NGROK_STORY_TO_IMAGE_URL") {
       return res.status(503).json({
-        message: "Story-to-Image API is not configured. Set STORY_TO_IMAGE_API_URL in .env"
+        message: t(req, "story_api_not_configured")
       });
     }
 
@@ -237,11 +238,11 @@ router.post("/story-to-image", authMiddleware, async (req, res) => {
 
     if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
       return res.status(503).json({
-        message: "Story-to-Image API is offline. The ngrok tunnel may need to be restarted."
+        message: t(req, "story_api_offline")
       });
     }
 
-    res.status(500).json({ message: "Image generation failed", details: error.message });
+    res.status(500).json({ message: t(req, "image_generation_failed"), details: error.message });
   }
 });
 
@@ -254,7 +255,7 @@ router.post("/name-to-cartouche", authMiddleware, async (req, res) => {
     const { name } = req.body;
 
     if (!name || !name.trim()) {
-      return res.status(400).json({ message: "Name is required" });
+      return res.status(400).json({ message: t(req, "name_required") });
     }
 
     const hfSpace = process.env.CARTOUCHE_HF_SPACE || "samaelgendy/gem_cartouche";
@@ -321,7 +322,7 @@ router.post("/name-to-cartouche", authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error("Cartouche Error:", error.message);
-    res.status(500).json({ message: "Cartouche generation failed", details: error.message });
+    res.status(500).json({ message: t(req, "cartouche_failed"), details: error.message });
   }
 });
 
@@ -336,14 +337,14 @@ router.post(
   async (req, res) => {
     try {
       if (!req.file) {
-        return res.status(400).json({ message: "Image is required" });
+        return res.status(400).json({ message: t(req, "image_required") });
       }
 
       const apiUrl = process.env.PHOTO_TO_PHARAOH_API_URL;
 
       if (!apiUrl || apiUrl === "YOUR_NGROK_PHOTO_TO_PHARAOH_URL") {
         return res.status(503).json({
-          message: "Photo-to-Pharaoh API is not configured. Set PHOTO_TO_PHARAOH_API_URL in .env"
+          message: t(req, "pharaoh_api_not_configured")
         });
       }
 
@@ -393,11 +394,11 @@ router.post(
 
       if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
         return res.status(503).json({
-          message: "Photo-to-Pharaoh API is offline. The ngrok tunnel may need to be restarted."
+          message: t(req, "pharaoh_api_offline")
         });
       }
 
-      res.status(500).json({ message: "Pharaoh transformation failed", details: error.message });
+      res.status(500).json({ message: t(req, "pharaoh_failed"), details: error.message });
     }
   }
 );
@@ -411,7 +412,7 @@ router.post("/text-to-speech", authMiddleware, async (req, res) => {
     const { statueId, language } = req.body;
 
     if (!statueId) {
-      return res.status(400).json({ message: "statueId is required" });
+      return res.status(400).json({ message: t(req, "statue_id_required") });
     }
 
     const ttsSpace = process.env.TTS_HF_SPACE || "samaelgendy/Tts1";
@@ -455,7 +456,7 @@ router.post("/text-to-speech", authMiddleware, async (req, res) => {
     // Gradio returns: [info_text, text, audio_path]
     // The audio_path could be a file object { path, url }
     if (!data || data.length < 3) {
-      return res.status(500).json({ message: "Invalid response from TTS model", data });
+      return res.status(500).json({ message: t(req, "tts_invalid_response"), data });
     }
 
     const infoText = data[0];
@@ -464,7 +465,7 @@ router.post("/text-to-speech", authMiddleware, async (req, res) => {
 
     if (infoText && infoText.includes("ارفع ملف الإكسيل")) {
       return res.status(400).json({
-        message: "TTS Model Error: The HuggingFace space requires the Excel file to be uploaded by the admin first.",
+        message: t(req, "tts_excel_required"),
         rawError: infoText
       });
     }
@@ -483,7 +484,7 @@ router.post("/text-to-speech", authMiddleware, async (req, res) => {
 
   } catch (error) {
     console.error("TTS Error:", error.message);
-    res.status(500).json({ message: "Text-to-Speech generation failed", details: error.message });
+    res.status(500).json({ message: t(req, "tts_failed"), details: error.message });
   }
 });
 
@@ -498,12 +499,12 @@ router.post(
     try {
       // Placeholder — will be connected to 3D model later
       res.status(202).json({
-        message: "Image-to-3D feature is coming soon",
+        message: t(req, "image_to_3d_coming_soon"),
         status: "placeholder"
       });
 
     } catch (error) {
-      res.status(500).json({ message: "Server error" });
+      res.status(500).json({ message: t(req, "server_error") });
     }
   }
 );
