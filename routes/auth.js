@@ -1,12 +1,30 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const streamifier = require("streamifier");
+const cloudinary = require("../config/cloudinary");
 const User = require("../models/User");
 const authMiddleware = require("../middleware/auth");
 const adminMiddleware = require("../middleware/adminMiddleware");
 const sendEmail = require("../utils/sendEmail");
 const { OAuth2Client } = require("google-auth-library");
 const { t } = require("../utils/i18n");
+
+/* =========================
+   Multer Setup for Avatar
+========================= */
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files are allowed"), false);
+    }
+  }
+});
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -336,6 +354,80 @@ router.put("/make-admin/:id", authMiddleware, adminMiddleware, async (req, res) 
   } catch (error) {
     console.error("Make Admin Error:", error);
     res.status(500).json({ message: t(req, "server_error") });
+  }
+});
+
+/* =========================
+   Upload Avatar (Cloudinary)
+   POST /api/auth/me/avatar
+   - Uploads image to Cloudinary
+   - Saves permanent URL in user.avatar
+   - Works across all devices
+========================= */
+router.post("/me/avatar", authMiddleware, upload.single("avatar"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: t(req, "no_file_uploaded") });
+    }
+
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: t(req, "user_not_found") });
+    }
+
+    // Delete old avatar from Cloudinary if it exists
+    if (user.avatar && user.avatar.includes("cloudinary")) {
+      try {
+        // Extract public_id from URL: .../gem_avatars/abc123.jpg -> gem_avatars/abc123
+        const parts = user.avatar.split("/");
+        const folder = parts[parts.length - 2];
+        const filename = parts[parts.length - 1].split(".")[0];
+        await cloudinary.uploader.destroy(`${folder}/${filename}`);
+      } catch (e) {
+        // Old avatar cleanup is best-effort, don't fail the request
+      }
+    }
+
+    // Upload new avatar to Cloudinary
+    const streamUpload = () => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            resource_type: "image",
+            folder: "gem_avatars",
+            public_id: `user_${req.user.id}_${Date.now()}`,
+            transformation: [
+              { width: 400, height: 400, crop: "fill", gravity: "face" },
+              { quality: "auto", fetch_format: "auto" }
+            ]
+          },
+          (error, result) => {
+            if (result) resolve(result);
+            else reject(error);
+          }
+        );
+        streamifier.createReadStream(req.file.buffer).pipe(stream);
+      });
+    };
+
+    const result = await streamUpload();
+
+    // Save Cloudinary URL to user
+    user.avatar = result.secure_url;
+    await user.save();
+
+    const updatedUser = user.toObject();
+    delete updatedUser.password;
+
+    res.json({
+      message: t(req, "profile_updated"),
+      avatarUrl: result.secure_url,
+      user: updatedUser
+    });
+
+  } catch (error) {
+    console.error("Avatar Upload Error:", error);
+    res.status(500).json({ message: t(req, "upload_failed") });
   }
 });
 
