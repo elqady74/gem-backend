@@ -83,7 +83,7 @@ router.get("/chats", authMiddleware, async (req, res) => {
 
 /* ============================================================
    3. Artifact Detection (camera / upload)
-      Sends image to detection model API (ngrok)
+      Sends image to HuggingFace storyteller API /detect
 ============================================================ */
 router.post(
   "/detect",
@@ -95,15 +95,16 @@ router.post(
         return res.status(400).json({ message: t(req, "image_required") });
       }
 
-      const detectionApiUrl = process.env.DETECTION_API_URL;
+      const storytellerUrl = process.env.STORYTELLER_API_URL;
+      const hfToken = process.env.STORYTELLER_HF_TOKEN;
 
-      if (!detectionApiUrl || detectionApiUrl === "YOUR_NGROK_DETECTION_URL") {
+      if (!storytellerUrl) {
         return res.status(503).json({
           message: t(req, "detection_api_not_configured")
         });
       }
 
-      // Send image to detection model
+      // Send image to HuggingFace storyteller /detect endpoint
       const form = new FormData();
       form.append("file", req.file.buffer, {
         filename: req.file.originalname,
@@ -111,21 +112,21 @@ router.post(
       });
 
       const apiResponse = await axios.post(
-        `${detectionApiUrl}/predict`,
+        `${storytellerUrl}/detect`,
         form,
         {
           headers: {
             ...form.getHeaders(),
-            ...ngrokHeaders()
+            ...(hfToken ? { Authorization: `Bearer ${hfToken}` } : {})
           },
-          timeout: 30000
+          timeout: 60000
         }
       );
 
       const result = apiResponse.data;
 
       // Try to find artifact info from DB
-      const detectedName = result.name || result.label || result.prediction || "Unknown";
+      const detectedName = result.name || result.class || result.label || result.prediction || "Unknown";
       const confidence = result.confidence || result.score || null;
 
       const artifact = await Artifact.findOne({
@@ -178,7 +179,8 @@ router.get("/detections", authMiddleware, async (req, res) => {
 
 /* ============================================================
    5. Story → Image
-      Sends story text to ngrok FastAPI → returns generated image
+      Uses HuggingFace Gradio space: soadatef199/pharaonic-ai-generator
+      Endpoint: /infer
 ============================================================ */
 router.post("/story-to-image", authMiddleware, async (req, res) => {
   try {
@@ -188,60 +190,73 @@ router.post("/story-to-image", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: t(req, "story_required") });
     }
 
-    const apiUrl = process.env.STORY_TO_IMAGE_API_URL;
+    const hfSpace = process.env.STORY_IMAGE_HF_SPACE || "soadatef199/pharaonic-ai-generator";
+    const hfToken = process.env.STORY_IMAGE_HF_TOKEN;
 
-    if (!apiUrl || apiUrl === "YOUR_NGROK_STORY_TO_IMAGE_URL") {
-      return res.status(503).json({
-        message: t(req, "story_api_not_configured")
+    // Dynamically import ES Module
+    const { Client } = await import("@gradio/client");
+
+    // Timeout helper
+    const withTimeout = (promise, ms, errorMsg) => {
+      let timer;
+      const timeoutPromise = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(errorMsg)), ms);
       });
-    }
+      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+    };
 
-    const apiResponse = await axios.post(
-      `${apiUrl}/generate`,
-      { story: story, prompt: story, text: story },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          ...ngrokHeaders()
-        },
-        timeout: 120000, // 2 minutes — image generation is slow
-        responseType: "arraybuffer" // may return binary image
-      }
+    // Connect to Gradio space
+    const client = await withTimeout(
+      Client.connect(hfSpace, { hf_token: hfToken }),
+      30000,
+      "Story-to-Image HuggingFace Space connection timed out (Space might be sleeping)"
     );
 
-    // Check if response is JSON or binary image
-    const contentType = apiResponse.headers["content-type"];
+    // Call /infer with the story as prompt
+    const result = await withTimeout(
+      client.predict("/infer", {
+        prompt: story,
+        negative_prompt: "blurry, low quality, distorted, deformed",
+        seed: 0,
+        randomize_seed: true,
+        width: 1024,
+        height: 1024,
+        guidance_scale: 7.5,
+        num_inference_steps: 30
+      }),
+      180000, // 3 minutes — image generation can be slow
+      "Image generation timed out"
+    );
 
-    if (contentType && contentType.includes("image")) {
-      const base64Image = Buffer.from(apiResponse.data).toString("base64");
-      const mimeType = contentType.split(";")[0];
+    const data = result.data;
 
-      return res.json({
-        image: `data:${mimeType};base64,${base64Image}`,
-        format: "base64"
-      });
+    // Gradio returns [image_file_object, seed]
+    let imageOutput = null;
+
+    if (data && Array.isArray(data) && data.length > 0) {
+      const firstResult = data[0];
+
+      if (typeof firstResult === "string") {
+        imageOutput = firstResult;
+      } else if (firstResult && firstResult.url) {
+        imageOutput = firstResult.url;
+      } else if (firstResult && firstResult.path) {
+        imageOutput = firstResult.path;
+      } else {
+        imageOutput = firstResult;
+      }
+    } else if (data && typeof data === "string") {
+      imageOutput = data;
     }
 
-    // JSON response
-    const result = typeof apiResponse.data === "string"
-      ? JSON.parse(apiResponse.data)
-      : apiResponse.data;
-
     res.json({
-      image: result.image || result.url || result.result || null,
-      format: result.format || "url",
-      rawResult: result
+      image: imageOutput,
+      format: "url",
+      rawResult: data
     });
 
   } catch (error) {
-    console.error("Story-to-Image Error:", error.response?.data || error.message);
-
-    if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
-      return res.status(503).json({
-        message: t(req, "story_api_offline")
-      });
-    }
-
+    console.error("Story-to-Image Error:", error.message);
     res.status(500).json({ message: t(req, "image_generation_failed"), details: error.message });
   }
 });
@@ -404,89 +419,73 @@ router.post(
 );
 
 /* ============================================================
-   8. Text-to-Speech (Samaelgendy Tts1)
-      Inputs: statueId (Number/String), language ('ar' or 'en')
+   8. Text-to-Speech (merged into storyteller /full_pipeline)
+      Sends image → gets story text + audio (base64 MP3)
+      Inputs: image file, language ('ar' or 'en')
 ============================================================ */
-router.post("/text-to-speech", authMiddleware, async (req, res) => {
-  try {
-    const { statueId, language } = req.body;
+router.post(
+  "/text-to-speech",
+  authMiddleware,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: t(req, "image_required") });
+      }
 
-    if (!statueId) {
-      return res.status(400).json({ message: t(req, "statue_id_required") });
-    }
+      const storytellerUrl = process.env.STORYTELLER_API_URL;
+      const hfToken = process.env.STORYTELLER_HF_TOKEN;
+      const language = req.body.language || "ar";
 
-    const ttsSpace = process.env.TTS_HF_SPACE || "samaelgendy/Tts1";
-    const ttsToken = process.env.TTS_HF_TOKEN;
-    const openrouterKey = process.env.TTS_OPENROUTER_KEY;
+      if (!storytellerUrl) {
+        return res.status(503).json({
+          message: t(req, "tts_api_not_configured")
+        });
+      }
 
-    // language mapping ("ar" -> "🇪🇬 عربي", "en" -> "🇬🇧 English")
-    const langFormatted = (language === "en") ? "🇬🇧 English" : "🇪🇬 عربي";
-    const statueFormatted = `[${statueId}]`;
-
-    // Dynamically import ES Module
-    const { Client } = await import("@gradio/client");
-
-    const withTimeout = (promise, ms, errorMsg) => {
-      let timer;
-      const timeoutPromise = new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(errorMsg)), ms);
+      // Send image + language to /full_pipeline
+      const form = new FormData();
+      form.append("file", req.file.buffer, {
+        filename: req.file.originalname,
+        contentType: req.file.mimetype
       });
-      return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
-    };
+      form.append("language", language);
 
-    // Connect
-    const client = await withTimeout(
-      Client.connect(ttsSpace, { hf_token: ttsToken }),
-      20000,
-      "TTS HuggingFace Space connection timed out"
-    );
+      const apiResponse = await axios.post(
+        `${storytellerUrl}/full_pipeline`,
+        form,
+        {
+          headers: {
+            ...form.getHeaders(),
+            ...(hfToken ? { Authorization: `Bearer ${hfToken}` } : {})
+          },
+          timeout: 120000 // 2 minutes — generation can be slow
+        }
+      );
 
-    // Predict: /play_statue takes [statue_label, language]
-    const result = await withTimeout(
-      client.predict("/play_statue", [
-        statueFormatted,
-        langFormatted
-      ]),
-      30000,
-      "TTS generation timed out"
-    );
+      const result = apiResponse.data;
 
-    const data = result.data;
-
-    // Gradio returns: [info_text, text, audio_path]
-    // The audio_path could be a file object { path, url }
-    if (!data || data.length < 3) {
-      return res.status(500).json({ message: t(req, "tts_invalid_response"), data });
-    }
-
-    const infoText = data[0];
-    const scriptText = data[1];
-    let audioOutput = data[2];
-
-    if (infoText && infoText.includes("ارفع ملف الإكسيل")) {
-      return res.status(400).json({
-        message: t(req, "tts_excel_required"),
-        rawError: infoText
+      // Response contains: story text + base64 MP3 audio
+      res.json({
+        story: result.story || result.text || null,
+        audioBase64: result.audio || result.audio_base64 || null,
+        detected: result.name || result.class || result.detected || null,
+        rawResult: result
       });
+
+    } catch (error) {
+      console.error("TTS/Pipeline Error:", error.response?.data || error.message);
+
+      if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
+        return res.status(503).json({
+          message: t(req, "tts_api_offline")
+        });
+      }
+
+      res.status(500).json({ message: t(req, "tts_failed"), details: error.message });
     }
-
-    if (typeof audioOutput === "object" && audioOutput?.url) {
-      audioOutput = audioOutput.url;
-    } else if (typeof audioOutput === "object" && audioOutput?.path) {
-      audioOutput = audioOutput.path;
-    }
-
-    res.json({
-      info: infoText,
-      text: scriptText,
-      audioUrl: audioOutput
-    });
-
-  } catch (error) {
-    console.error("TTS Error:", error.message);
-    res.status(500).json({ message: t(req, "tts_failed"), details: error.message });
   }
-});
+);
 
 /* ============================================================
    9. Image → 3D Model (Placeholder)
