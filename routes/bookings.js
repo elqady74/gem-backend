@@ -16,6 +16,7 @@ const PAYMOB_SECRET_KEY = process.env.PAYMOB_SECRET_KEY;
 const PAYMOB_PUBLIC_KEY = process.env.PAYMOB_PUBLIC_KEY;
 const PAYMOB_HMAC_SECRET = process.env.PAYMOB_HMAC_SECRET;
 const PAYMOB_INTEGRATION_ID = process.env.PAYMOB_INTEGRATION_ID;
+const PAYMOB_IFRAME_ID = process.env.PAYMOB_IFRAME_ID;
 const PAYMOB_BASE_URL = "https://accept.paymob.com/api";
 
 /* =========================
