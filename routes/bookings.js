@@ -222,7 +222,7 @@ router.post("/checkout", authMiddleware, async (req, res) => {
     );
 
     // Build checkout URL (Paymob hosted iframe)
-    const checkoutUrl = `https://accept.paymob.com/api/acceptance/iframes/${PAYMOB_INTEGRATION_ID}?payment_token=${paymentKey}`;
+    const checkoutUrl = `https://accept.paymob.com/api/acceptance/iframes/${PAYMOB_IFRAME_ID}?payment_token=${paymentKey}`;
 
     res.json({
       bookingId: booking._id,
