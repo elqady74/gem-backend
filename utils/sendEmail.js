@@ -1,14 +1,28 @@
 const nodemailer = require("nodemailer");
 
 const sendEmail = async (options) => {
-    // إنشاء الناقل (Transporter) باستخدام إعدادات SMTP الخاصة بـ Gmail أو غيره
+    // إنشاء الناقل (Transporter) باستخدام إعدادات SMTP الخاصة بـ Gmail
+    // ⚠️ يجب استخدام App Password وليس كلمة مرور Gmail العادية
+    // https://myaccount.google.com/apppasswords
     const transporter = nodemailer.createTransport({
-        service: "gmail",
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true, // SSL
         auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PASS,
         },
     });
+
+    // التحقق من الاتصال قبل الإرسال
+    try {
+        await transporter.verify();
+    } catch (verifyErr) {
+        console.error("❌ Email transporter verification failed:", verifyErr.message);
+        console.error("💡 Make sure EMAIL_PASS in .env is a Google App Password (16 chars), NOT your Gmail password.");
+        console.error("   Get one here: https://myaccount.google.com/apppasswords");
+        throw new Error(`Email authentication failed: ${verifyErr.message}`);
+    }
 
     // رسالة البريد الإلكتروني
     const mailOptions = {
@@ -29,6 +43,7 @@ const sendEmail = async (options) => {
     };
 
     await transporter.sendMail(mailOptions);
+    console.log(`✅ OTP email sent successfully to ${options.email}`);
 };
 
 module.exports = sendEmail;
