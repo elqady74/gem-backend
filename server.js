@@ -22,7 +22,7 @@ const app = express();
 const langMiddleware = require("./middleware/langMiddleware");
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(langMiddleware);
 
 /* =========================

@@ -269,8 +269,10 @@ router.get("/me", authMiddleware, async (req, res) => {
 
 /* =========================
    Update Profile
+   - Accepts avatar as: file upload (multipart), base64 data-URL (JSON), or existing URL
+   - All images are uploaded to Cloudinary for permanent storage
 ========================= */
-router.put("/me", authMiddleware, async (req, res) => {
+router.put("/me", authMiddleware, upload.single("avatar"), async (req, res) => {
   try {
     const { name, avatar, language, oldPassword, newPassword } = req.body;
 
@@ -284,8 +286,77 @@ router.put("/me", authMiddleware, async (req, res) => {
       user.name = name.trim();
     }
 
-    // Update avatar (if provided)
-    if (avatar !== undefined) {
+    // ──── Avatar Update (3 scenarios) ────
+    // Helper: delete old Cloudinary avatar
+    const deleteOldAvatar = async () => {
+      if (user.avatar && user.avatar.includes("cloudinary")) {
+        try {
+          const parts = user.avatar.split("/");
+          const folder = parts[parts.length - 2];
+          const filename = parts[parts.length - 1].split(".")[0];
+          await cloudinary.uploader.destroy(`${folder}/${filename}`);
+        } catch (e) {
+          // Old avatar cleanup is best-effort
+        }
+      }
+    };
+
+    // Scenario 1: File uploaded via multipart form-data (req.file)
+    if (req.file) {
+      try {
+        await deleteOldAvatar();
+
+        const streamUpload = () => {
+          return new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              {
+                resource_type: "image",
+                folder: "gem_avatars",
+                public_id: `user_${req.user.id}_${Date.now()}`,
+                transformation: [
+                  { width: 400, height: 400, crop: "fill", gravity: "face" },
+                  { quality: "auto", fetch_format: "auto" }
+                ]
+              },
+              (error, result) => {
+                if (result) resolve(result);
+                else reject(error);
+              }
+            );
+            streamifier.createReadStream(req.file.buffer).pipe(stream);
+          });
+        };
+
+        const result = await streamUpload();
+        user.avatar = result.secure_url;
+      } catch (uploadErr) {
+        console.error("Avatar File Upload Error:", uploadErr);
+        return res.status(500).json({ message: t(req, "upload_failed") });
+      }
+    }
+    // Scenario 2: Base64 / data-URL sent in JSON body
+    else if (avatar && (avatar.startsWith("data:image") || avatar.startsWith("data:application"))) {
+      try {
+        await deleteOldAvatar();
+
+        const uploadResult = await cloudinary.uploader.upload(avatar, {
+          resource_type: "image",
+          folder: "gem_avatars",
+          public_id: `user_${req.user.id}_${Date.now()}`,
+          transformation: [
+            { width: 400, height: 400, crop: "fill", gravity: "face" },
+            { quality: "auto", fetch_format: "auto" }
+          ]
+        });
+
+        user.avatar = uploadResult.secure_url;
+      } catch (uploadErr) {
+        console.error("Avatar Base64 Upload Error:", uploadErr);
+        return res.status(500).json({ message: t(req, "upload_failed") });
+      }
+    }
+    // Scenario 3: Already a URL (Cloudinary, Google, etc.) or empty string
+    else if (avatar !== undefined) {
       user.avatar = avatar;
     }
 
