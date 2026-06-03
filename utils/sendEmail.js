@@ -26,7 +26,7 @@ const sendEmail = async (options) => {
 
     // رسالة البريد الإلكتروني
     const mailOptions = {
-        from: `"Grand Egyptian Museum (GEM)" <${process.env.EMAIL_USER}>`,
+        from: `"Tutora" <${process.env.EMAIL_USER}>`,
         to: options.email,
         subject: options.subject,
         text: options.message,

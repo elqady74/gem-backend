@@ -74,8 +74,10 @@ notes.forEach(([t, b]) => {
   doc.moveDown(0.5);
 });
 
-// ═══ 1. AUTH ═══
-section("🔐 Authentication  /api/auth");
+// ═══════════════════════════════════════════════
+// 1. AUTH
+// ═══════════════════════════════════════════════
+section("🔐 1. Authentication  /api/auth");
 
 ep("POST", "/api/auth/register", "Register", false, "Create new account",
   [["name","String",true],["email","String",true],["password","String",true]],
@@ -105,8 +107,8 @@ ep("GET", "/api/auth/me", "Get Current User", true, "Returns user profile (no pa
   null,
   [[200,'{ _id, name, email, avatar, language, role }']]);
 
-ep("PUT", "/api/auth/me", "Update Profile", true, "Update name, avatar, language, password",
-  [["name","String",false],["avatar","String",false],["language","String",false],["oldPassword","String",false],["newPassword","String",false]],
+ep("PUT", "/api/auth/me", "Update Profile", true, "Update name, avatar, language, password. Also accepts multipart/form-data with avatar file",
+  [["name","String",false],["avatar","String/File",false],["language","String",false],["oldPassword","String",false],["newPassword","String",false]],
   [[200,'{ "message": "Profile updated", "user": {...} }']]);
 
 ep("POST", "/api/auth/me/avatar", "Upload Avatar (Cloudinary)", true, "multipart/form-data — max 5MB. Stored permanently on Cloudinary",
@@ -116,8 +118,10 @@ ep("POST", "/api/auth/me/avatar", "Upload Avatar (Cloudinary)", true, "multipart
 ep("PUT", "/api/auth/make-admin/:id", "Make Admin", true, "Admin only — promote user to admin",
   null, [[200,"Updated user object"]]);
 
-// ═══ 2. ARTIFACTS ═══
-section("🏺 Artifacts  /api/artifacts");
+// ═══════════════════════════════════════════════
+// 2. ARTIFACTS
+// ═══════════════════════════════════════════════
+section("🏺 2. Artifacts  /api/artifacts");
 
 ep("GET", "/api/artifacts", "Get All Artifacts", false, "Returns full list of artifacts", null, [[200,"Array of artifacts"]]);
 
@@ -133,62 +137,74 @@ ep("PUT", "/api/artifacts/:id", "Update (Admin)", true, "Update artifact by ID",
 
 ep("DELETE", "/api/artifacts/:id", "Delete (Admin)", true, "Delete artifact by ID", null, [[200,'{ "message" }']]);
 
-// ═══ 3. FAVORITES ═══
-section("❤️ Favorites  /api/favorites");
+// ═══════════════════════════════════════════════
+// 3. FAVORITES
+// ═══════════════════════════════════════════════
+section("❤️ 3. Favorites  /api/favorites");
 
-ep("POST", "/api/favorites/toggle/:itemId", "Toggle Favorite ⭐", true, "Add or remove in one call. type: Artifact (default) or Event",
+ep("POST", "/api/favorites/:itemId", "Add to Favorites", true, "itemId can be MongoDB ObjectId or static string. type defaults to Artifact",
+  [["type","String",false]], [[201,"Favorite object"],[400,"Already in favorites"]]);
+
+ep("POST", "/api/favorites/toggle/:itemId", "Toggle Favorite", true, "Add or remove in one call. type: Artifact (default) or Event",
   [["type","String",false]], [[200,'{ "isFavorited": true/false, "message" }']]);
 
-ep("GET", "/api/favorites/my", "My Favorites", true, "Get favorites. Query: ?type=Artifact or ?type=Event",
+ep("GET", "/api/favorites/my", "My Favorites", true, "Get favorites (populated). Query: ?type=Artifact or ?type=Event",
   null, [[200,"Array of favorites (populated with item data)"]]);
-
-ep("GET", "/api/favorites/check/:itemId", "Check if Favorited", true, "Query: ?type=Artifact",
-  null, [[200,'{ "isFavorited": true/false }']]);
 
 ep("GET", "/api/favorites/count", "Favorites Count", true, "Query: ?type=Artifact (optional)",
   null, [[200,'{ "count": 5 }']]);
 
-ep("POST", "/api/favorites/:itemId", "Add to Favorites", true, null,
-  [["type","String",false]], [[201,"Favorite object"],[400,"Already in favorites"]]);
+ep("GET", "/api/favorites/check/:itemId", "Check if Favorited", true, "Query: ?type=Artifact",
+  null, [[200,'{ "isFavorited": true/false }']]);
 
 ep("DELETE", "/api/favorites/:itemId", "Remove from Favorites", true, "Query: ?type=Artifact",
   null, [[200,'{ "message" }'],[404,"Not found"]]);
 
-// ═══ 4. EVENTS ═══
-section("🎭 Events  /api/events");
+// ═══════════════════════════════════════════════
+// 4. EVENTS
+// ═══════════════════════════════════════════════
+section("🎭 4. Events  /api/events");
 
 ep("GET", "/api/events", "Get All Events", false, "Sorted by date ascending", null, [[200,"Array of events"]]);
 
 ep("POST", "/api/events", "Create Event (Admin)", true, null,
-  [["title","String",true],["description","String",true],["date","Date (ISO)",true],["imageUrl","String",false]],
+  [["title","String",true],["description","String",true],["date","Date (ISO)",true],["imageUrl","String",false],["location","String",false]],
   [[201,"Created event"],[403,"Access denied"]]);
+
+ep("PUT", "/api/events/:id", "Update Event (Admin)", true, "Partial update — only send changed fields",
+  [["title","String",false],["description","String",false],["date","Date (ISO)",false],["imageUrl","String",false],["location","String",false]],
+  [[200,"Updated event"],[404,"Event not found"]]);
 
 ep("DELETE", "/api/events/:id", "Delete Event (Admin)", true, null, null, [[200,'{ "message" }']]);
 
-// ═══ 5. BOOKINGS ═══
-section("🎫 Bookings & Payments  /api/bookings");
+// ═══════════════════════════════════════════════
+// 5. BOOKINGS
+// ═══════════════════════════════════════════════
+section("🎫 5. Bookings & Payments  /api/bookings");
 
-doc.fillColor(C.grey).fontSize(8).font("Helvetica").text("Prices: Egyptian(adult:200,child:100,student:100) | Arab(adult:1450,child:730) | Expatriate(adult:730,child:370) — 14% VAT added");
+doc.fillColor(C.grey).fontSize(8).font("Helvetica").text("Prices loaded dynamically from Settings. Tax rate defaults to 14%. Payment via Paymob gateway.");
 doc.moveDown(0.5);
 
 ep("POST", "/api/bookings/checkout", "Create Checkout", true, "Creates booking + Paymob payment URL",
-  [["visitDate","String (ISO)",true],["nationalityType","String",true],["tickets","Array",true],["billingData","Object",false]],
+  [["visitDate","String (ISO)",true],["nationalityType","String",true],["tickets","Array [{category, quantity}]",true],["billingData","Object",false]],
   [[200,'{ bookingId, subtotal, tax, total, checkoutUrl }']]);
 
 ep("POST", "/api/bookings/verify-payment", "Verify Payment", true, "Call after user returns from Paymob",
   [["orderId","String",true],["transactionId","String",false]],
   [[200,'{ "message": "Payment successful", "booking" }']]);
 
-ep("POST", "/api/bookings/webhook", "Paymob Webhook", false, "Auto-called by Paymob — do NOT call manually", null, [[200,'{ "message" }']]);
+ep("POST", "/api/bookings/webhook", "Paymob Webhook", false, "Auto-called by Paymob with HMAC verification — do NOT call manually", null, [[200,'{ "message" }']]);
 
 ep("GET", "/api/bookings/my-bookings", "My Bookings", true, "User's bookings (newest first)", null, [[200,"Array of bookings"]]);
 
-ep("GET", "/api/bookings/:id", "Booking Details", true, null, null, [[200,"Booking object"]]);
+ep("GET", "/api/bookings/:id", "Booking Details", true, "Get single booking by ID", null, [[200,"Booking object"],[404,"Not found"]]);
 
-ep("GET", "/api/bookings", "All Bookings (Admin)", true, "With user info populated", null, [[200,"Array"]]);
+ep("GET", "/api/bookings", "All Bookings (Admin)", true, "With user info populated", null, [[200,"Array of all bookings"]]);
 
-// ═══ 6. AI ═══
-section("🤖 AI Features  /api/ai");
+// ═══════════════════════════════════════════════
+// 6. AI
+// ═══════════════════════════════════════════════
+section("🤖 6. AI Features  /api/ai");
 
 doc.fillColor(C.grey).fontSize(8).font("Helvetica").text("Detection + TTS powered by HuggingFace (egyptian-museum-storyteller). Story-to-Image by Gradio (pharaonic-ai-generator).");
 doc.moveDown(0.5);
@@ -203,23 +219,25 @@ ep("POST", "/api/ai/detect", "Artifact Detection", true, "multipart/form-data �
 
 ep("GET", "/api/ai/detections", "Detection History", true, null, null, [[200,"Array of detections"]]);
 
-ep("POST", "/api/ai/story-to-image", "Story → Image", true, "Generate pharaonic image from story text (Gradio space). Takes 1-3 min.",
+ep("POST", "/api/ai/story-to-image", "Story to Image", true, "Generate pharaonic image from story text (Gradio space). Takes 1-3 min.",
   [["story","String",true]], [[200,'{ "image": "url", "format": "url", "rawResult" }'],[500,"Generation failed"]]);
 
-ep("POST", "/api/ai/name-to-cartouche", "Name → Cartouche", true, "Convert name to hieroglyphic cartouche",
+ep("POST", "/api/ai/name-to-cartouche", "Name to Cartouche", true, "Convert name to hieroglyphic cartouche",
   [["name","String",true]], [[200,'{ "name", "cartouche": "image_url", "rawResult" }']]);
 
-ep("POST", "/api/ai/photo-to-pharaoh", "Photo → Pharaoh", true, "multipart/form-data — transform selfie to pharaoh",
+ep("POST", "/api/ai/photo-to-pharaoh", "Photo to Pharaoh", true, "multipart/form-data — transform selfie to pharaoh",
   [["image","File",true]], [[200,'{ "pharaohImage": "data:image/...;base64,...", "format": "base64" }'],[503,"API offline"]]);
 
-ep("POST", "/api/ai/text-to-speech", "Full Pipeline (Detect + Story + Audio)", true, "multipart/form-data — upload artifact photo → detect + generate story + audio (MP3)",
+ep("POST", "/api/ai/text-to-speech", "Full Pipeline (Detect + Story + Audio)", true, "multipart/form-data — upload artifact photo. detect + generate story + audio (MP3)",
   [["image","File",true],["language","String ('ar'|'en')",false]], [[200,'{ story, audioBase64, detected, rawResult }'],[503,"API offline"]]);
 
-ep("POST", "/api/ai/image-to-3d", "Image → 3D (Coming Soon)", true, "multipart/form-data — placeholder",
+ep("POST", "/api/ai/image-to-3d", "Image to 3D (Coming Soon)", true, "multipart/form-data — placeholder",
   [["image","File",true]], [[202,'{ "message": "Coming soon", "status": "placeholder" }']]);
 
-// ═══ 7. UPLOAD ═══
-section("📤 Upload & 🎬 Videos");
+// ═══════════════════════════════════════════════
+// 7. UPLOAD & VIDEOS
+// ═══════════════════════════════════════════════
+section("📤 7. Upload & 🎬 Videos");
 
 ep("POST", "/api/upload/video", "Upload Video", false, "multipart/form-data — max 100MB",
   [["video","File",true],["title","String",false]], [[200,'{ title, public_id, url, duration }']]);
@@ -229,12 +247,144 @@ ep("GET", "/api/videos", "Get All Videos", false, null, null, [[200,"Array of vi
 ep("POST", "/api/videos/add", "Add Video Record", false, null,
   [["title","String",true],["public_id","String",true],["url","String",true],["duration","Number",false]], [[200,"Video object"]]);
 
-// ═══ 8. LANG ═══
-section("🌐 Language  /api/lang");
+// ═══════════════════════════════════════════════
+// 8. LANG
+// ═══════════════════════════════════════════════
+section("🌐 8. Language  /api/lang");
 
 ep("GET", "/api/lang", "Get Translations (auto)", false, "Based on Accept-Language header", null, [[200,'{ lang, translations }']]);
 ep("GET", "/api/lang/:locale", "Get by Locale", false, "e.g. /api/lang/ar", null, [[200,'{ lang, translations }']]);
 ep("GET", "/api/lang/all/translations", "Get All Languages", false, null, null, [[200,'{ supported, translations: {en:{...}, ar:{...}} }']]);
+
+// ═══════════════════════════════════════════════
+// 9. SETTINGS (Public)
+// ═══════════════════════════════════════════════
+section("⚙️ 9. Public Settings  /api/settings");
+
+ep("GET", "/api/settings", "Get Settings", false, "Public museum global settings (ticket prices, add-ons, hours, tax rate)", null, [[200,"Settings object"]]);
+
+// ═══════════════════════════════════════════════
+// 10. ADMIN DASHBOARD
+// ═══════════════════════════════════════════════
+section("🛡️ 10. Admin Dashboard  /api/admin");
+
+doc.fillColor(C.accent).fontSize(9).font("Helvetica-Bold").text("⚠️  All endpoints below require Admin Token");
+doc.moveDown(0.8);
+
+// --- Stats ---
+doc.fillColor(C.brand).fontSize(12).font("Helvetica-Bold").text("📊 Dashboard Stats");
+doc.moveDown(0.3);
+
+ep("GET", "/api/admin/stats", "Dashboard Statistics", true, "Users, bookings, revenue, artifacts, events, AI, videos, favorites — all in one call", null, [[200,"Full stats object"]]);
+
+// --- Users ---
+doc.fillColor(C.brand).fontSize(12).font("Helvetica-Bold").text("👥 User Management");
+doc.moveDown(0.3);
+
+ep("GET", "/api/admin/users", "List All Users", true, "Paginated. Query: ?page, limit, search, role, banned", null, [[200,"Paginated users"]]);
+
+ep("GET", "/api/admin/users/:id", "Get Single User", true, null, null, [[200,"User object"],[404,"Not found"]]);
+
+ep("PUT", "/api/admin/users/:id", "Update User", true, null,
+  [["name","String",false],["role","String (user|admin)",false]], [[200,'{ "message", "user" }']]);
+
+ep("DELETE", "/api/admin/users/:id", "Delete User", true, "Cannot delete yourself", null, [[200,'{ "message" }']]);
+
+ep("PUT", "/api/admin/users/:id/ban", "Ban / Unban User", true, "Toggles ban status. Cannot ban yourself", null, [[200,'{ "message", "isBanned" }']]);
+
+ep("GET", "/api/admin/users/:id/activity", "Get User Activity", true, "Returns bookings, chats, detections, favorites for a user", null, [[200,'{ user, activity: { bookings, chats, detections, favorites } }']]);
+
+// --- Bookings ---
+doc.fillColor(C.brand).fontSize(12).font("Helvetica-Bold").text("🎫 Booking Management");
+doc.moveDown(0.3);
+
+ep("GET", "/api/admin/bookings", "List All Bookings", true, "Paginated. Query: ?page, limit, status, nationality, dateFrom, dateTo", null, [[200,"Paginated bookings with user info"]]);
+
+ep("GET", "/api/admin/bookings/:id", "Get Single Booking", true, "With user avatar populated", null, [[200,"Booking object"],[404,"Not found"]]);
+
+ep("PUT", "/api/admin/bookings/:id/status", "Update Booking Status", true, null,
+  [["status","String (pending|paid|cancelled|failed)",true]], [[200,'{ "message", "booking" }']]);
+
+ep("GET", "/api/admin/bookings-revenue", "Revenue Report", true, "Query: ?period=daily|weekly|monthly — defaults to monthly",
+  null, [[200,'{ period, totalRevenue, totalBookings, currency, breakdown }']]);
+
+// --- AI ---
+doc.fillColor(C.brand).fontSize(12).font("Helvetica-Bold").text("🤖 AI Management");
+doc.moveDown(0.3);
+
+ep("GET", "/api/admin/ai/chats", "List All Chats", true, "Paginated. Query: ?page, limit, search, userId", null, [[200,"Paginated chats with user info"]]);
+
+ep("GET", "/api/admin/ai/detections", "List All Detections", true, "Paginated. Query: ?page, limit, artifact, userId", null, [[200,"Paginated detections"]]);
+
+ep("DELETE", "/api/admin/ai/chats/:id", "Delete Chat", true, null, null, [[200,'{ "message" }']]);
+
+// --- Logs ---
+doc.fillColor(C.brand).fontSize(12).font("Helvetica-Bold").text("📋 Activity Logs");
+doc.moveDown(0.3);
+
+ep("GET", "/api/admin/logs", "View Activity Logs", true, "Paginated. Query: ?page, limit, action, adminId, targetModel, dateFrom, dateTo", null, [[200,"Paginated activity logs"]]);
+
+// --- Settings ---
+doc.fillColor(C.brand).fontSize(12).font("Helvetica-Bold").text("⚙️ Settings");
+doc.moveDown(0.3);
+
+ep("GET", "/api/admin/settings", "Get Settings", true, null, null, [[200,"Settings object"]]);
+
+ep("PUT", "/api/admin/settings", "Update Settings", true, "Only allowed fields are applied",
+  [["ticketPrices","Object",false],["addons","Object",false],["taxRate","Number",false],["maxBookingsPerDay","Number",false],["maintenanceMode","Boolean",false],["museumOpenTime","String",false],["museumCloseTime","String",false]],
+  [[200,'{ "message", "settings" }']]);
+
+// --- Notifications ---
+doc.fillColor(C.brand).fontSize(12).font("Helvetica-Bold").text("🔔 Notifications");
+doc.moveDown(0.3);
+
+ep("POST", "/api/admin/notifications/send", "Send Notification", true, "If recipientId is provided, sends to specific user. Otherwise broadcasts to all.",
+  [["title","String",true],["message","String",true],["type","String (info|warning|promo|system)",false],["recipientId","ObjectId",false]],
+  [[201,'{ "message", "notification" }']]);
+
+ep("GET", "/api/admin/notifications", "Get Sent Notifications", true, "Paginated. Query: ?page, limit, type, broadcast=true", null, [[200,"Paginated notifications"]]);
+
+
+// ═══ SUMMARY PAGE ═══
+section("📊 Summary — 64 Total Endpoints");
+
+const summary = [
+  ["Auth & Users", "/api/auth", "10"],
+  ["Artifacts", "/api/artifacts", "5"],
+  ["Favorites", "/api/favorites", "6"],
+  ["Events", "/api/events", "4"],
+  ["Bookings & Payments", "/api/bookings", "6"],
+  ["AI Features", "/api/ai", "9"],
+  ["Upload", "/api/upload", "1"],
+  ["Videos", "/api/videos", "2"],
+  ["Language", "/api/lang", "3"],
+  ["Public Settings", "/api/settings", "1"],
+  ["Admin Dashboard", "/api/admin", "17"],
+];
+
+// Table header
+const tableX = 60;
+doc.fillColor(C.brand).fontSize(10).font("Helvetica-Bold");
+doc.text("Section", tableX, doc.y, { width: 200 });
+doc.text("Mount Point", tableX + 200, doc.y - 14, { width: 150 });
+doc.text("Endpoints", tableX + 370, doc.y - 14, { width: 80 });
+doc.moveDown(0.5);
+doc.strokeColor("#ddd").lineWidth(1).moveTo(tableX, doc.y).lineTo(doc.page.width - 50, doc.y).stroke();
+doc.moveDown(0.3);
+
+summary.forEach(([name, mount, count]) => {
+  doc.fillColor(C.grey).fontSize(9).font("Helvetica");
+  doc.text(name, tableX, doc.y, { width: 200 });
+  doc.fillColor(C.blue).font("Courier").text(mount, tableX + 200, doc.y - 12, { width: 150 });
+  doc.fillColor(C.brand).font("Helvetica-Bold").text(count, tableX + 400, doc.y - 12, { width: 50 });
+  doc.moveDown(0.3);
+});
+
+doc.moveDown(0.5);
+doc.strokeColor("#ddd").lineWidth(1).moveTo(tableX, doc.y).lineTo(doc.page.width - 50, doc.y).stroke();
+doc.moveDown(0.3);
+doc.fillColor(C.brand).fontSize(11).font("Helvetica-Bold").text("Total: 64 Endpoints", tableX, doc.y);
+
 
 // ═══ PAGE NUMBERS ═══
 const pages = doc.bufferedPageRange();
