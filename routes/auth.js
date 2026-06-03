@@ -155,7 +155,15 @@ router.post("/forgot-password", async (req, res) => {
   try {
     const { email } = req.body;
 
-    const user = await User.findOne({ email });
+    // Validate input
+    if (!email || !email.trim()) {
+      return res.status(400).json({ message: t(req, "no_user_with_email") });
+    }
+
+    // Normalize email: lowercase + trim (matches the User model's lowercase/trim)
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({ email: normalizedEmail });
     if (!user) {
       return res.status(404).json({ message: t(req, "no_user_with_email") });
     }

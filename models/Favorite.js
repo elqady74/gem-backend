@@ -7,7 +7,7 @@ const favoriteSchema = new mongoose.Schema({
     required: true
   },
   itemId: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: String,
     required: true,
     refPath: "itemType"
   },

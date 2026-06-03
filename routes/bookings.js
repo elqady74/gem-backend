@@ -19,10 +19,14 @@ const PAYMOB_INTEGRATION_ID = process.env.PAYMOB_INTEGRATION_ID;
 const PAYMOB_IFRAME_ID = process.env.PAYMOB_IFRAME_ID;
 const PAYMOB_BASE_URL = "https://accept.paymob.com/api";
 
+const Settings = require("../models/Settings");
+
 /* =========================
    Ticket Pricing (EGP)
+   Dynamic — reads from Settings collection
+   Falls back to hardcoded defaults
 ========================= */
-const PRICES = {
+const DEFAULT_PRICES = {
   egyptian: {
     adult: 200,
     child: 100,
@@ -38,11 +42,35 @@ const PRICES = {
   }
 };
 
+async function getTicketPrices() {
+  try {
+    const settings = await Settings.findOne();
+    if (settings && settings.ticketPrices) {
+      return settings.ticketPrices;
+    }
+  } catch (e) {
+    console.error("Failed to load dynamic prices, using defaults:", e.message);
+  }
+  return DEFAULT_PRICES;
+}
+
+async function getTaxRate() {
+  try {
+    const settings = await Settings.findOne();
+    if (settings && settings.taxRate !== undefined) {
+      return settings.taxRate;
+    }
+  } catch (e) {
+    console.error("Failed to load tax rate, using default:", e.message);
+  }
+  return 0.14;
+}
+
 /* =========================
    Validation Helpers
 ========================= */
-function validateTickets(tickets, nationalityType, req) {
-  const validCategories = Object.keys(PRICES[nationalityType]);
+function validateTickets(tickets, nationalityType, prices, req) {
+  const validCategories = Object.keys(prices[nationalityType]);
 
   for (const ticket of tickets) {
     if (!validCategories.includes(ticket.category)) {
@@ -138,6 +166,10 @@ router.post("/checkout", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: t(req, "missing_booking_data") });
     }
 
+    // --- Load dynamic prices & tax rate ---
+    const PRICES = await getTicketPrices();
+    const TAX_RATE = await getTaxRate();
+
     if (!PRICES[nationalityType]) {
       return res.status(400).json({ message: t(req, "invalid_nationality_type") });
     }
@@ -149,7 +181,7 @@ router.post("/checkout", authMiddleware, async (req, res) => {
     }
 
     // --- Ticket validation ---
-    const ticketError = validateTickets(tickets, nationalityType, req);
+    const ticketError = validateTickets(tickets, nationalityType, PRICES, req);
     if (ticketError) {
       return res.status(400).json({ message: ticketError });
     }
@@ -168,7 +200,7 @@ router.post("/checkout", authMiddleware, async (req, res) => {
       };
     });
 
-    const tax = +(subtotal * 0.14).toFixed(2);
+    const tax = +(subtotal * TAX_RATE).toFixed(2);
     const total = +(subtotal + tax).toFixed(2);
 
     // --- Create booking in DB ---

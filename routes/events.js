@@ -27,16 +27,53 @@ router.post("/", authMiddleware, async (req, res) => {
       return res.status(403).json({ message: t(req, "access_denied") });
     }
 
-    const { title, description, date, imageUrl } = req.body;
+    const { title, description, date, imageUrl, location } = req.body;
 
     const event = await Event.create({
       title,
       description,
       date,
-      imageUrl
+      imageUrl,
+      location
     });
 
     res.status(201).json(event);
+
+  } catch (error) {
+    console.error("Events Error:", error);
+    res.status(500).json({ message: t(req, "server_error") });
+  }
+});
+
+/* =========================
+   Update Event (Admin Only)
+========================= */
+router.put("/:id", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({ message: t(req, "access_denied") });
+    }
+
+    const { title, description, date, imageUrl, location } = req.body;
+    const updates = {};
+
+    if (title) updates.title = title;
+    if (description) updates.description = description;
+    if (date) updates.date = date;
+    if (imageUrl !== undefined) updates.imageUrl = imageUrl;
+    if (location !== undefined) updates.location = location;
+
+    const event = await Event.findByIdAndUpdate(
+      req.params.id,
+      updates,
+      { new: true }
+    );
+
+    if (!event) {
+      return res.status(404).json({ message: t(req, "event_not_found") });
+    }
+
+    res.json(event);
 
   } catch (error) {
     console.error("Events Error:", error);

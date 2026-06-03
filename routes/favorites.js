@@ -65,9 +65,26 @@ router.get("/my", authMiddleware, async (req, res) => {
       filter.itemType = itemType;
     }
 
-    const favorites = await Favorite.find(filter)
-      .populate("itemId")
-      .sort({ createdAt: -1 });
+    const mongoose = require("mongoose");
+    const Artifact = require("../models/Artifact");
+    const Event = require("../models/Event");
+
+    let favorites = await Favorite.find(filter)
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Manually populate to safely handle static frontend string IDs
+    for (let fav of favorites) {
+      if (mongoose.Types.ObjectId.isValid(fav.itemId)) {
+        if (fav.itemType === "Artifact") {
+          const item = await Artifact.findById(fav.itemId).lean();
+          if (item) fav.itemId = item;
+        } else if (fav.itemType === "Event") {
+          const item = await Event.findById(fav.itemId).lean();
+          if (item) fav.itemId = item;
+        }
+      }
+    }
 
     res.json(favorites);
 

@@ -13,6 +13,8 @@ const eventRoutes = require("./routes/events");
 const uploadRoutes = require("./routes/upload");
 const videoRoutes = require("./routes/videos");
 const langRoutes = require("./routes/lang");
+const adminRoutes = require("./routes/admin");
+const settingsRoutes = require("./routes/settings");
 
 const app = express();
 
@@ -37,6 +39,8 @@ app.use("/api/events", eventRoutes);
 app.use("/api/upload", uploadRoutes);
 app.use("/api/videos", videoRoutes);
 app.use("/api/lang", langRoutes);
+app.use("/api/admin", adminRoutes);
+app.use("/api/settings", settingsRoutes);
 
 /* =========================
    MongoDB Connection
