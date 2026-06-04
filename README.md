@@ -1,5 +1,4 @@
 # 🏛 Tutora – Your AI Tour Guide to the Grand Egyptian Museum
-# 🏛 Tutora – Your AI Tour Guide to the Grand Egyptian Museum
 
 <p align="center">
   <strong>Your Intelligent Tour Guide to the Grand Egyptian Museum</strong>
