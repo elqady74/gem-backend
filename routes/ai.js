@@ -83,7 +83,8 @@ router.get("/chats", authMiddleware, async (req, res) => {
 
 /* ============================================================
    3. Artifact Detection (camera / upload)
-      Sends image to HuggingFace storyteller API /detect
+      Uses HuggingFace Gradio space: tutora-artifact-lens
+      API: run_analyze → returns markdown + audio + button state
 ============================================================ */
 router.post(
   "/detect",
@@ -95,40 +96,65 @@ router.post(
         return res.status(400).json({ message: t(req, "image_required") });
       }
 
-      const storytellerUrl = process.env.STORYTELLER_API_URL;
-      const hfToken = process.env.STORYTELLER_HF_TOKEN;
+      const hfSpace = process.env.ARTIFACT_LENS_HF_SPACE || "s0ad-atef/tutora-artifact-lens";
+      const hfToken = process.env.ARTIFACT_LENS_HF_TOKEN;
 
-      if (!storytellerUrl) {
+      if (!hfSpace) {
         return res.status(503).json({
           message: t(req, "detection_api_not_configured")
         });
       }
 
-      // Send image to HuggingFace storyteller /detect endpoint
-      const form = new FormData();
-      form.append("file", req.file.buffer, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype
-      });
+      const language = req.body.language || "ar";
+      const langChoice = language === "en" ? "English" : "Arabic / عربي";
 
-      const apiResponse = await axios.post(
-        `${storytellerUrl}/detect`,
-        form,
-        {
-          headers: {
-            ...form.getHeaders(),
-            ...(hfToken ? { Authorization: `Bearer ${hfToken}` } : {})
-          },
-          timeout: 60000
-        }
+      // Dynamically import ES Module
+      const { Client } = await import("@gradio/client");
+
+      // Timeout helper
+      const withTimeout = (promise, ms, errorMsg) => {
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(errorMsg)), ms);
+        });
+        return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+      };
+
+      // Connect to Gradio space
+      const client = await withTimeout(
+        Client.connect(hfSpace, { hf_token: hfToken }),
+        30000,
+        "Artifact Lens HuggingFace Space connection timed out (Space might be sleeping)"
       );
 
-      const result = apiResponse.data;
+      // Convert buffer to Blob for Gradio
+      const imageBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
+
+      // Call run_analyze
+      const result = await withTimeout(
+        client.predict("/run_analyze", [imageBlob, langChoice]),
+        120000,
+        "Artifact detection timed out"
+      );
+
+      const data = result.data;
+      // data[0] = markdown string: "### artifact_name\n\n**Confidence:** 95.3%\n\nstory..."
+      // data[1] = audio file object
+      // data[2] = button state (ignored)
+
+      const markdownText = data[0] || "";
+
+      // Parse markdown to extract detection info
+      const nameMatch = markdownText.match(/^###\s*(.+)$/m);
+      const confMatch = markdownText.match(/\*\*Confidence:\*\*\s*([\d.]+)%/);
+      const detectedName = nameMatch ? nameMatch[1].trim() : "Unknown";
+      const confidence = confMatch ? parseFloat(confMatch[1]) / 100 : null;
+
+      // Extract story text (everything after the confidence line)
+      const storyMatch = markdownText.split(/\*\*Confidence:\*\*.*\n\n?/);
+      const storyText = storyMatch.length > 1 ? storyMatch[1].trim() : "";
 
       // Try to find artifact info from DB
-      const detectedName = result.name || result.class || result.label || result.prediction || "Unknown";
-      const confidence = result.confidence || result.score || null;
-
       const artifact = await Artifact.findOne({
         name: { $regex: new RegExp(detectedName, "i") }
       });
@@ -139,18 +165,19 @@ router.post(
         imageName: req.file.originalname,
         detectedArtifact: detectedName,
         confidence,
-        details: result
+        details: { story: storyText, source: "artifact-lens" }
       });
 
       res.json({
         detected: detectedName,
         confidence,
         artifact: artifact || null,
-        rawResult: result
+        story: storyText,
+        rawResult: markdownText
       });
 
     } catch (error) {
-      console.error("Detection Error:", error.response?.data || error.message);
+      console.error("Detection Error:", error.message);
 
       if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
         return res.status(503).json({
@@ -162,6 +189,7 @@ router.post(
     }
   }
 );
+
 
 /* ============================================================
    4. Get My Detection History (existing)
@@ -419,8 +447,9 @@ router.post(
 );
 
 /* ============================================================
-   8. Text-to-Speech (merged into storyteller /full_pipeline)
-      Sends image → gets story text + audio (base64 MP3)
+   8. Text-to-Speech
+      Uses HuggingFace Gradio space: tutora-artifact-lens
+      API: run_analyze → returns markdown + audio
       Inputs: image file, language ('ar' or 'en')
 ============================================================ */
 router.post(
@@ -433,48 +462,93 @@ router.post(
         return res.status(400).json({ message: t(req, "image_required") });
       }
 
-      const storytellerUrl = process.env.STORYTELLER_API_URL;
-      const hfToken = process.env.STORYTELLER_HF_TOKEN;
+      const hfSpace = process.env.ARTIFACT_LENS_HF_SPACE || "s0ad-atef/tutora-artifact-lens";
+      const hfToken = process.env.ARTIFACT_LENS_HF_TOKEN;
       const language = req.body.language || "ar";
+      const langChoice = language === "en" ? "English" : "Arabic / عربي";
 
-      if (!storytellerUrl) {
+      if (!hfSpace) {
         return res.status(503).json({
           message: t(req, "tts_api_not_configured")
         });
       }
 
-      // Send image + language to /full_pipeline
-      const form = new FormData();
-      form.append("file", req.file.buffer, {
-        filename: req.file.originalname,
-        contentType: req.file.mimetype
-      });
-      form.append("language", language);
+      // Dynamically import ES Module
+      const { Client } = await import("@gradio/client");
 
-      const apiResponse = await axios.post(
-        `${storytellerUrl}/full_pipeline`,
-        form,
-        {
-          headers: {
-            ...form.getHeaders(),
-            ...(hfToken ? { Authorization: `Bearer ${hfToken}` } : {})
-          },
-          timeout: 120000 // 2 minutes — generation can be slow
-        }
+      const withTimeout = (promise, ms, errorMsg) => {
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(errorMsg)), ms);
+        });
+        return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+      };
+
+      const client = await withTimeout(
+        Client.connect(hfSpace, { hf_token: hfToken }),
+        30000,
+        "Artifact Lens Space connection timed out (Space might be sleeping)"
       );
 
-      const result = apiResponse.data;
+      const imageBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
 
-      // Response contains: story text + base64 MP3 audio
+      const result = await withTimeout(
+        client.predict("/run_analyze", [imageBlob, langChoice]),
+        120000,
+        "Story + TTS generation timed out"
+      );
+
+      const data = result.data;
+      const markdownText = data[0] || "";
+      const audioFile = data[1]; // audio file object { url, path, ... }
+
+      // Parse markdown
+      const nameMatch = markdownText.match(/^###\s*(.+)$/m);
+      const confMatch = markdownText.match(/\*\*Confidence:\*\*\s*([\d.]+)%/);
+      const detectedName = nameMatch ? nameMatch[1].trim() : "Unknown";
+
+      // Extract story text
+      const storyMatch = markdownText.split(/\*\*Confidence:\*\*.*\n\n?/);
+      const storyText = storyMatch.length > 1 ? storyMatch[1].trim() : "";
+
+      // Get audio URL from Gradio response
+      let audioUrl = null;
+      if (audioFile) {
+        if (typeof audioFile === "string") {
+          audioUrl = audioFile;
+        } else if (audioFile.url) {
+          audioUrl = audioFile.url;
+        } else if (audioFile.path) {
+          audioUrl = audioFile.path;
+        }
+      }
+
+      // Download audio and convert to base64
+      let audioBase64 = null;
+      if (audioUrl) {
+        try {
+          const audioResponse = await axios.get(audioUrl, {
+            responseType: "arraybuffer",
+            timeout: 30000
+          });
+          audioBase64 = `data:audio/mpeg;base64,${Buffer.from(audioResponse.data).toString("base64")}`;
+        } catch (audioErr) {
+          console.error("Audio download failed:", audioErr.message);
+          // Still return the URL if download fails
+          audioBase64 = audioUrl;
+        }
+      }
+
       res.json({
-        story: result.story || result.text || null,
-        audioBase64: result.audio || result.audio_base64 || null,
-        detected: result.name || result.class || result.detected || null,
-        rawResult: result
+        story: storyText,
+        audioBase64,
+        audioUrl,
+        detected: detectedName,
+        rawResult: markdownText
       });
 
     } catch (error) {
-      console.error("TTS/Pipeline Error:", error.response?.data || error.message);
+      console.error("TTS/Pipeline Error:", error.message);
 
       if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
         return res.status(503).json({
@@ -488,7 +562,9 @@ router.post(
 );
 
 /* ============================================================
-   9. Image → 3D Model (Placeholder)
+   9. Image → 3D Model
+      Uses HuggingFace Gradio space: tutora-artifact-lens
+      Flow: run_analyze (to detect + set 3D prompt) → run_3d
 ============================================================ */
 router.post(
   "/image-to-3d",
@@ -496,16 +572,256 @@ router.post(
   upload.single("image"),
   async (req, res) => {
     try {
-      // Placeholder — will be connected to 3D model later
-      res.status(202).json({
-        message: t(req, "image_to_3d_coming_soon"),
-        status: "placeholder"
+      if (!req.file) {
+        return res.status(400).json({ message: t(req, "image_required") });
+      }
+
+      const hfSpace = process.env.ARTIFACT_LENS_HF_SPACE || "s0ad-atef/tutora-artifact-lens";
+      const hfToken = process.env.ARTIFACT_LENS_HF_TOKEN;
+
+      if (!hfSpace) {
+        return res.status(503).json({
+          message: t(req, "model_3d_api_not_configured")
+        });
+      }
+
+      const language = req.body.language || "en";
+      const langChoice = language === "en" ? "English" : "Arabic / عربي";
+
+      const { Client } = await import("@gradio/client");
+
+      const withTimeout = (promise, ms, errorMsg) => {
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(errorMsg)), ms);
+        });
+        return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+      };
+
+      const client = await withTimeout(
+        Client.connect(hfSpace, { hf_token: hfToken }),
+        30000,
+        "Artifact Lens Space connection timed out (Space might be sleeping)"
+      );
+
+      const imageBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
+
+      // Step 1: Analyze (detect artifact + set internal 3D prompt)
+      console.log("Image-to-3D: Step 1 — Analyzing artifact...");
+      const analyzeResult = await withTimeout(
+        client.predict("/run_analyze", [imageBlob, langChoice]),
+        120000,
+        "Artifact analysis timed out"
+      );
+
+      const markdownText = analyzeResult.data[0] || "";
+      const nameMatch = markdownText.match(/^###\s*(.+)$/m);
+      const detectedName = nameMatch ? nameMatch[1].trim() : "Unknown";
+
+      // Step 2: Generate 3D model (uses the prompt set by step 1)
+      console.log("Image-to-3D: Step 2 — Generating 3D model for:", detectedName);
+      const model3dResult = await withTimeout(
+        client.predict("/run_3d", []),
+        300000, // 5 minutes — 3D generation is slow (Shap-E)
+        "3D model generation timed out (Shap-E can take up to 5 minutes)"
+      );
+
+      const model3dFile = model3dResult.data[0];
+
+      // Get 3D model URL
+      let model3dUrl = null;
+      if (model3dFile) {
+        if (typeof model3dFile === "string") {
+          model3dUrl = model3dFile;
+        } else if (model3dFile.url) {
+          model3dUrl = model3dFile.url;
+        } else if (model3dFile.path) {
+          model3dUrl = model3dFile.path;
+        }
+      }
+
+      res.json({
+        detected: detectedName,
+        model3d: model3dUrl,
+        format: "glb",
+        rawResult: model3dFile
       });
 
     } catch (error) {
-      res.status(500).json({ message: t(req, "server_error") });
+      console.error("Image-to-3D Error:", error.message);
+
+      if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
+        return res.status(503).json({
+          message: t(req, "model_3d_api_offline")
+        });
+      }
+
+      res.status(500).json({ message: t(req, "model_3d_failed"), details: error.message });
     }
   }
 );
 
-module.exports = router;
+/* ============================================================
+   10. Full Analysis (detect → story → audio → 3D) — ALL IN ONE
+       Uses HuggingFace Gradio space: tutora-artifact-lens
+       Calls run_analyze then run_3d sequentially
+============================================================ */
+router.post(
+  "/full-analysis",
+  authMiddleware,
+  upload.single("image"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: t(req, "image_required") });
+      }
+
+      const hfSpace = process.env.ARTIFACT_LENS_HF_SPACE || "s0ad-atef/tutora-artifact-lens";
+      const hfToken = process.env.ARTIFACT_LENS_HF_TOKEN;
+
+      if (!hfSpace) {
+        return res.status(503).json({
+          message: t(req, "model_3d_api_not_configured")
+        });
+      }
+
+      const language = req.body.language || "ar";
+      const langChoice = language === "en" ? "English" : "Arabic / عربي";
+
+      const { Client } = await import("@gradio/client");
+
+      const withTimeout = (promise, ms, errorMsg) => {
+        let timer;
+        const timeoutPromise = new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(errorMsg)), ms);
+        });
+        return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+      };
+
+      const client = await withTimeout(
+        Client.connect(hfSpace, { hf_token: hfToken }),
+        30000,
+        "Artifact Lens Space connection timed out (Space might be sleeping)"
+      );
+
+      const imageBlob = new Blob([req.file.buffer], { type: req.file.mimetype });
+
+      // ── Step 1: Analyze (detect + story + TTS) ─────────────
+      console.log("Full Analysis: Step 1 — Analyzing artifact...");
+      const analyzeResult = await withTimeout(
+        client.predict("/run_analyze", [imageBlob, langChoice]),
+        120000,
+        "Artifact analysis timed out"
+      );
+
+      const data = analyzeResult.data;
+      const markdownText = data[0] || "";
+      const audioFile = data[1];
+
+      // Parse detection info from markdown
+      const nameMatch = markdownText.match(/^###\s*(.+)$/m);
+      const confMatch = markdownText.match(/\*\*Confidence:\*\*\s*([\d.]+)%/);
+      const detectedName = nameMatch ? nameMatch[1].trim() : "Unknown";
+      const confidence = confMatch ? parseFloat(confMatch[1]) / 100 : null;
+
+      // Extract story text
+      const storyMatch = markdownText.split(/\*\*Confidence:\*\*.*\n\n?/);
+      const storyText = storyMatch.length > 1 ? storyMatch[1].trim() : "";
+
+      // Get audio URL
+      let audioUrl = null;
+      if (audioFile) {
+        if (typeof audioFile === "string") {
+          audioUrl = audioFile;
+        } else if (audioFile.url) {
+          audioUrl = audioFile.url;
+        } else if (audioFile.path) {
+          audioUrl = audioFile.path;
+        }
+      }
+
+      // Download audio → base64
+      let audioBase64 = null;
+      if (audioUrl) {
+        try {
+          const audioResponse = await axios.get(audioUrl, {
+            responseType: "arraybuffer",
+            timeout: 30000
+          });
+          audioBase64 = `data:audio/mpeg;base64,${Buffer.from(audioResponse.data).toString("base64")}`;
+        } catch (audioErr) {
+          console.error("Audio download failed:", audioErr.message);
+          audioBase64 = audioUrl;
+        }
+      }
+
+      // ── Step 2: Generate 3D Model ──────────────────────────
+      console.log("Full Analysis: Step 2 — Generating 3D model for:", detectedName);
+      let model3dUrl = null;
+      try {
+        const model3dResult = await withTimeout(
+          client.predict("/run_3d", []),
+          300000, // 5 minutes
+          "3D model generation timed out"
+        );
+
+        const model3dFile = model3dResult.data[0];
+        if (model3dFile) {
+          if (typeof model3dFile === "string") {
+            model3dUrl = model3dFile;
+          } else if (model3dFile.url) {
+            model3dUrl = model3dFile.url;
+          } else if (model3dFile.path) {
+            model3dUrl = model3dFile.path;
+          }
+        }
+      } catch (err3d) {
+        console.error("3D generation failed (non-fatal):", err3d.message);
+        // Don't fail the entire request — return what we have
+      }
+
+      // Try to find artifact info from DB
+      const artifact = await Artifact.findOne({
+        name: { $regex: new RegExp(detectedName, "i") }
+      });
+
+      // Save detection record
+      await Detection.create({
+        user: req.user.id,
+        imageName: req.file.originalname,
+        detectedArtifact: detectedName,
+        confidence,
+        details: {
+          story: storyText,
+          has3dModel: !!model3dUrl,
+          source: "artifact-lens-full"
+        }
+      });
+
+      res.json({
+        detected: detectedName,
+        confidence,
+        artifact: artifact || null,
+        story: storyText,
+        audioBase64,
+        audioUrl,
+        model3d: model3dUrl,
+        model3dFormat: model3dUrl ? "glb" : null,
+        rawMarkdown: markdownText
+      });
+
+    } catch (error) {
+      console.error("Full Analysis Error:", error.message);
+
+      if (error.code === "ECONNREFUSED" || error.code === "ENOTFOUND") {
+        return res.status(503).json({
+          message: t(req, "model_3d_api_offline")
+        });
+      }
+
+      res.status(500).json({ message: t(req, "full_analysis_failed"), details: error.message });
+    }
+  }
+);
+
+module.exports = router;
