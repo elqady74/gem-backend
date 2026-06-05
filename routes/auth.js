@@ -365,7 +365,13 @@ router.put("/me", authMiddleware, upload.single("avatar"), async (req, res) => {
     }
     // Scenario 3: Already a URL (Cloudinary, Google, etc.) or empty string
     else if (avatar !== undefined) {
-      user.avatar = avatar;
+      if (avatar === "" || avatar === null) {
+        user.avatar = "";
+      } else if (typeof avatar === "string" && (avatar.startsWith("http://") || avatar.startsWith("https://"))) {
+        user.avatar = avatar;
+      } else {
+        return res.status(400).json({ message: "Invalid avatar format. Please upload the file using FormData, Base64, or provide a valid HTTP URL." });
+      }
     }
 
     // Update language (if provided)
