@@ -34,6 +34,7 @@ Base URL (Local): `http://localhost:5000/api`
 | **GET** | `/artifacts` | Get all artifacts | — | No |
 | **GET** | `/artifacts/:id` | Get single artifact by ID | — | No |
 | **POST** | `/artifacts` | Create artifact | `{name, description, era, imageUrl, model3DUrl, audioUrl, videoUrl, ...}` | Yes (Admin) |
+| **POST** | `/artifacts/bulk-upload` | Bulk create artifacts from Excel | `multipart/form-data` → field: `file` | Yes (Admin) |
 | **PUT** | `/artifacts/:id` | Update artifact | `{name?, description?, imageUrl?, ...}` | Yes (Admin) |
 | **DELETE** | `/artifacts/:id` | Delete artifact | — | Yes (Admin) |
 

@@ -1,10 +1,29 @@
 const express = require("express");
+const multer = require("multer");
+const xlsx = require("xlsx");
 const Artifact = require("../models/Artifact");
 const authMiddleware = require("../middleware/authMiddleware");
 const adminMiddleware = require("../middleware/adminMiddleware");
 const { t } = require("../utils/i18n");
 
 const router = express.Router();
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    if (
+      file.mimetype.includes("excel") || 
+      file.mimetype.includes("spreadsheetml") ||
+      file.originalname.endsWith(".xls") ||
+      file.originalname.endsWith(".xlsx")
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error("Please upload an Excel file"), false);
+    }
+  }
+});
 
 /* =========================
    Create Artifact (Admin)
@@ -17,6 +36,54 @@ router.post("/", authMiddleware, adminMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Artifacts Error:", error);
     res.status(500).json({ message: t(req, "server_error") });
+  }
+});
+
+/* =========================
+   Bulk Upload Artifacts (Admin)
+========================= */
+router.post("/bulk-upload", authMiddleware, adminMiddleware, upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    // Read the file
+    const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const data = xlsx.utils.sheet_to_json(sheet);
+
+    if (data.length === 0) {
+      return res.status(400).json({ message: "File is empty" });
+    }
+
+    // Map rows to Artifact model
+    const artifactsToInsert = data.map(row => ({
+      name: row.name || row.Name || row.NAME,
+      description: row.description || row.Description || row.DESCRIPTION,
+      era: row.era || row.Era || row.ERA,
+      imageUrl: row.imageUrl || row.ImageUrl || row.IMAGEURL || row.image_url,
+      model3DUrl: row.model3DUrl || row.Model3DUrl || row.model_3d_url,
+      audioUrl: row.audioUrl || row.AudioUrl || row.audio_url,
+      videoUrl: row.videoUrl || row.VideoUrl || row.video_url
+    })).filter(a => a.name && a.description); // Required fields
+
+    if (artifactsToInsert.length === 0) {
+      return res.status(400).json({ message: "No valid artifacts found in the file. Make sure 'name' and 'description' columns exist." });
+    }
+
+    // Insert to DB
+    const result = await Artifact.insertMany(artifactsToInsert);
+
+    res.status(201).json({ 
+      message: `${result.length} artifacts uploaded successfully`,
+      insertedCount: result.length
+    });
+
+  } catch (error) {
+    console.error("Bulk Upload Error:", error);
+    res.status(500).json({ message: t(req, "server_error"), error: error.message });
   }
 });
 
