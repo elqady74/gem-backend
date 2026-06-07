@@ -60,13 +60,13 @@ router.post("/bulk-upload", authMiddleware, adminMiddleware, upload.single("file
 
     // Map rows to Artifact model
     const artifactsToInsert = data.map(row => ({
-      name: row.name || row.Name || row.NAME,
-      description: row.description || row.Description || row.DESCRIPTION,
-      era: row.era || row.Era || row.ERA,
-      imageUrl: row.imageUrl || row.ImageUrl || row.IMAGEURL || row.image_url,
-      model3DUrl: row.model3DUrl || row.Model3DUrl || row.model_3d_url,
-      audioUrl: row.audioUrl || row.AudioUrl || row.audio_url,
-      videoUrl: row.videoUrl || row.VideoUrl || row.video_url
+      name: row.name || row.Name || row.NAME || row["اسم الاثر"] || row["اسم الأثر"] || row["الاسم"],
+      description: row.description || row.Description || row.DESCRIPTION || row["الوصف"] || row["وصف"],
+      era: row.era || row.Era || row.ERA || row["الحقبة"] || row["العصر"] || row["الفترة"],
+      imageUrl: row.imageUrl || row.ImageUrl || row.IMAGEURL || row.image_url || row["الصورة"],
+      model3DUrl: row.model3DUrl || row.Model3DUrl || row.model_3d_url || row["المجسم"],
+      audioUrl: row.audioUrl || row.AudioUrl || row.audio_url || row["الصوت"],
+      videoUrl: row.videoUrl || row.VideoUrl || row.video_url || row["الفيديو"]
     })).filter(a => a.name && a.description); // Required fields
 
     if (artifactsToInsert.length === 0) {
