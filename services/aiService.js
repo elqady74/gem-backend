@@ -13,9 +13,12 @@ async function generateAIResponse(question) {
       return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
     };
 
-    // الاتصال بمساحة Hugging Face المُقدمة باستخدام مفتاح الـ API للـ Client
+    const hfToken = process.env.HF_TOKEN;
+    const openRouterKey = process.env.OPENROUTER_API_KEY;
+
+    // الاتصال بمساحة Hugging Face المُقدمة باستخدام مفتاح الـ API
     const client = await withTimeout(
-      Client.connect("rana589/chat-bot", { hf_token: process.env.HF_TOKEN }),
+      Client.connect("rana589/chat-bot", { hf_token: hfToken }),
       20000,
       "HuggingFace Space connection timed out (Token might be invalid)"
     );
@@ -25,7 +28,7 @@ async function generateAIResponse(question) {
       client.predict("/chat_with_gem_1", {
         message: question,
         history: [],
-        api_key_input: process.env.OPENROUTER_API_KEY,
+        api_key_input: openRouterKey,
         provider_choice: "openrouter",
         image: null,
       }),
