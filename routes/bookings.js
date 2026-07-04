@@ -45,7 +45,9 @@ const DEFAULT_PRICES = {
 async function getTicketPrices() {
   try {
     const settings = await Settings.findOne();
-    if (settings && settings.ticketPrices) {
+    // The Settings schema might use a different ticket pricing model (e.g. general, guided)
+    // We must ensure it has the nationality keys expected by the booking flow.
+    if (settings && settings.ticketPrices && settings.ticketPrices.egyptian) {
       return settings.ticketPrices;
     }
   } catch (e) {
@@ -159,7 +161,9 @@ async function getPaymobPaymentKey(authToken, orderId, amountCents, billingData)
 router.post("/checkout", authMiddleware, async (req, res) => {
   try {
 
-    const { visitDate, nationalityType, tickets, billingData } = req.body;
+    console.log("=== CHECKOUT BODY ===", req.body);
+    const { visitDate, tickets, billingData } = req.body;
+    const nationalityType = req.body.nationalityType?.toLowerCase().trim();
 
     // --- Basic validation ---
     if (!visitDate || !nationalityType || !tickets?.length) {
