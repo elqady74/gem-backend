@@ -62,7 +62,27 @@ async function callFinalseq(imageBuffer, mimetype, language, want3d) {
     "Artifact analysis timed out"
   );
 
-  const data = result.data;
+  let data = result.data;
+
+  // Auto-retry once if 3D was requested but returned null due to HF Space ZeroGPU timeout/errors
+  if (want3d && !data[3]) {
+    console.warn("[Finalseq] 3D model returned null. Retrying one more time...");
+    try {
+      const retryResult = await withTimeout(
+        client.predict("/run_pipeline", [fileRef, language, want3d]),
+        300000,
+        "Artifact analysis timed out on retry"
+      );
+      if (retryResult && retryResult.data && retryResult.data[3]) {
+        console.log("[Finalseq] Retry successful! 3D model generated.");
+        data = retryResult.data;
+      } else {
+        console.warn("[Finalseq] Retry also failed to generate 3D model.");
+      }
+    } catch (retryErr) {
+      console.error("[Finalseq] Retry error:", retryErr.message);
+    }
+  }
   // data[0] = info_line string: "التصنيف: {name}  |  الثقة: {conf}%"
   // data[1] = story string
   // data[2] = audio file object or null
@@ -547,7 +567,7 @@ router.post(
 /* ============================================================
    9. Image → 3D Model
       Uses Gradio space: s0ad-atef/finalseq
-      Calls run_pipeline(image, language, want_3d=true)
+      Calls /generate_3d (Dedicated 3D API)
 ============================================================ */
 router.post(
   "/image-to-3d",
@@ -559,26 +579,64 @@ router.post(
         return res.status(400).json({ message: t(req, "image_required") });
       }
 
-      const language = req.body.language || "en";
+      const { Client, handle_file } = await import("@gradio/client");
 
-      // Note: We get 'story' too, because the Python backend appends 3D errors to the story!
-      const { detectedName, glbUrl, story } =
-        await callFinalseq(req.file.buffer, req.file.mimetype, language, true);
+      const hfSpace = process.env.FINALSEQ_HF_SPACE || "s0ad-atef/finalseq";
+      const hfToken = process.env.FINALSEQ_HF_TOKEN || process.env.HF_TOKEN;
+
+      const client = await withTimeout(
+        Client.connect(hfSpace, hfToken ? { token: hfToken } : {}),
+        60000,
+        "Finalseq Space connection timed out"
+      );
+
+      const fileRef = handle_file(req.file.buffer);
+
+      let glbUrl = null;
+      let errorStory = "";
+
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          const result = await withTimeout(
+            client.predict("/generate_3d", { image: fileRef }),
+            300000, // 5 min
+            "3D generation timed out"
+          );
+          
+          const data = result.data;
+          
+          if (data && Array.isArray(data) && data.length > 0) {
+            const fileObj = data[0];
+            if (typeof fileObj === "string") glbUrl = fileObj;
+            else if (fileObj && fileObj.url) glbUrl = fileObj.url;
+            else if (fileObj && fileObj.path) glbUrl = fileObj.path;
+            else glbUrl = fileObj;
+          } else if (data && typeof data === "object" && data.url) {
+            glbUrl = data.url;
+          }
+
+          if (glbUrl) break;
+          else if (attempt < 2) console.warn("[Finalseq 3D] /generate_3d returned null, retrying...");
+        } catch (e) {
+          console.error(`[Finalseq 3D] Attempt ${attempt} error:`, e.message);
+          errorStory = e.message;
+          if (attempt === 2) throw e;
+        }
+      }
 
       if (!glbUrl) {
-        console.error("❌ 3D generation failed on the Gradio space side.");
-        console.error("❌ Python Exception details (from story):", story);
         return res.status(500).json({ 
-          message: `فشل توليد الـ 3D من الموديل. تفاصيل الخطأ: ${story || "No URL returned"}`,
-          details: story
+          message: `فشل توليد الـ 3D من الموديل. تفاصيل الخطأ: ${errorStory || "No URL returned"}`,
+          details: errorStory
         });
       }
 
       res.json({
-        detected: detectedName,
+        detected: "Unknown", // The dedicated 3D endpoint doesn't return the name
         model3d: glbUrl,
+        model3d_url: glbUrl, // Added for frontend compatibility
         format: "glb",
-        debug_story: story
+        debug_story: "Generated via /generate_3d endpoint"
       });
 
     } catch (error) {
