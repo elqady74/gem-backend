@@ -45,7 +45,7 @@ app.use("/api/settings", settingsRoutes);
 /* =========================
    MongoDB Connection
 ========================= */
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI ? process.env.MONGO_URI.trim() : "")
    .then(() => console.log("MongoDB Connected ✅"))
    .catch((err) => console.log(err));
 
